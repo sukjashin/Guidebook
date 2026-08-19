@@ -5,6 +5,8 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
+    // GitHub Pages serves this repository below /Guidebook/.
+    base: '/Guidebook/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
