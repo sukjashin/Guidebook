@@ -27,15 +27,14 @@ export const Header: React.FC<HeaderProps> = ({
             <div>
               <div className="flex items-center space-x-2">
                 <h1 className="font-bold text-sm sm:text-lg text-slate-100 tracking-tight">
-                  <span className="sm:hidden">기상관측 업무가이드</span>
-                  <span className="hidden sm:inline">기상관측표준화 업무가이드</span>
+                  관측e비서
                 </h1>
                 <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
                   AI 챗봇 & 업무지원
                 </span>
                 <span className="hidden lg:inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
                   <FileText className="w-3.5 h-3.5 text-blue-400" />
-                  <span>근거: 2026 업무가이드(156p)</span>
+                  <span>근거: 2026 기상관측표준화 업무가이드(156p)</span>
                 </span>
               </div>
               <p className="text-xs text-slate-400 hidden sm:block">

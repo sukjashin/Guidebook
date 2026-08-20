@@ -88,12 +88,14 @@ async function answerQuestion(request: Request) {
   }
 }
 
-export default async function handler(request: Request) {
-  if (request.method === 'GET') {
-    return json({ status: 'ok', service: 'Guidebook PDF RAG chatbot' });
-  }
-  if (request.method === 'POST') {
-    return answerQuestion(request);
-  }
-  return json({ error: '지원하지 않는 요청 방식입니다.' }, 405);
-}
+export default {
+  async fetch(request: Request) {
+    if (request.method === 'GET') {
+      return json({ status: 'ok', service: 'Guidebook PDF RAG chatbot' });
+    }
+    if (request.method === 'POST') {
+      return answerQuestion(request);
+    }
+    return json({ error: '지원하지 않는 요청 방식입니다.' }, 405);
+  },
+};

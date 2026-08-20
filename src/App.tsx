@@ -104,7 +104,13 @@ export default function App() {
         }),
       });
 
-      const data = await response.json();
+      const responseText = await response.text();
+      let data: any;
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        throw new Error(`챗봇 서버 응답 오류 (${response.status})`);
+      }
 
       if (!response.ok) {
         throw new Error(data.error || `서버 응답 오류 (${response.status})`);
