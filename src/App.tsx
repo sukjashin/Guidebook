@@ -6,6 +6,7 @@ import { StandardCalculator } from './components/StandardCalculator';
 import { SensorSpecsView } from './components/SensorSpecsView';
 import { HistoryDrawer } from './components/HistoryDrawer';
 import { Message, ChatSession } from './types';
+import { searchLocalGuide } from './utils/localGuideSearch';
 
 const INITIAL_MESSAGE: Message = {
   id: 'welcome-1',
@@ -95,6 +96,24 @@ export default function App() {
     setIsLoading(true);
 
     try {
+      const isStaticPages = window.location.hostname.endsWith('github.io');
+
+      if (isStaticPages) {
+        const data = await searchLocalGuide(text);
+        const assistantMsg: Message = {
+          id: `assistant-${Date.now()}`,
+          role: 'assistant',
+          content: data.reply,
+          timestamp: Date.now(),
+          sources: data.sources,
+          suggestedQuestions: data.suggestedQuestions,
+        };
+        const updatedMessages = [...newMessages, assistantMsg];
+        setMessages(updatedMessages);
+        saveAnsweredSession(text, updatedMessages);
+        return;
+      }
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -121,36 +140,7 @@ export default function App() {
 
       const updatedMessages = [...newMessages, assistantMsg];
       setMessages(updatedMessages);
-
-      // Auto-save to History Sessions
-      const sessionTitle = text.length > 35 ? text.slice(0, 35) + '...' : text;
-      const targetSessionId = currentSessionId || `session-${Date.now()}`;
-
-      setSessions((prev) => {
-        const existingIndex = prev.findIndex((s) => s.id === targetSessionId);
-        if (existingIndex >= 0) {
-          const updated = [...prev];
-          updated[existingIndex] = {
-            ...updated[existingIndex],
-            updatedAt: Date.now(),
-            messages: updatedMessages,
-          };
-          return updated;
-        } else {
-          const newSession: ChatSession = {
-            id: targetSessionId,
-            title: sessionTitle,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            messages: updatedMessages,
-          };
-          return [newSession, ...prev];
-        }
-      });
-
-      if (!currentSessionId) {
-        setCurrentSessionId(targetSessionId);
-      }
+      saveAnsweredSession(text, updatedMessages);
     } catch (err: any) {
       console.error('Chat error:', err);
       const errorMsg: Message = {
@@ -163,6 +153,37 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const saveAnsweredSession = (text: string, answeredMessages: Message[]) => {
+    const sessionTitle = text.length > 35 ? text.slice(0, 35) + '...' : text;
+    const targetSessionId = currentSessionId || `session-${Date.now()}`;
+
+    setSessions((prev) => {
+      const existingIndex = prev.findIndex((session) => session.id === targetSessionId);
+      if (existingIndex >= 0) {
+        const updated = [...prev];
+        updated[existingIndex] = {
+          ...updated[existingIndex],
+          updatedAt: Date.now(),
+          messages: answeredMessages,
+        };
+        return updated;
+      }
+
+      return [
+        {
+          id: targetSessionId,
+          title: sessionTitle,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          messages: answeredMessages,
+        },
+        ...prev,
+      ];
+    });
+
+    if (!currentSessionId) setCurrentSessionId(targetSessionId);
   };
 
   // Reset to a clean, pristine editor workspace
@@ -250,12 +271,12 @@ export default function App() {
       />
 
       {/* Footer */}
-      <footer id="app-footer" className="bg-slate-900/90 border-t border-slate-800 py-3 px-4 text-center text-xs text-slate-400">
+      <footer id="app-footer" className="hidden md:block bg-slate-900/90 border-t border-slate-800 py-3 px-4 text-center text-xs text-slate-400">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center space-x-2">
             <span className="font-semibold text-slate-200">광주지방기상청 관측과(062-720-0553)</span>
             <span className="hidden sm:inline text-slate-600">|</span>
-            <span className="text-slate-400">근거: 「2026 기상관측표준화 업무가이드」(총 156쪽) 기술지원</span>
+            <span className="text-slate-400">근거: 「2026 기상관측표준화 업무가이드」 핵심 기준 DB</span>
           </div>
           <div className="flex items-center space-x-3 text-slate-500 text-[11px]">
             <button

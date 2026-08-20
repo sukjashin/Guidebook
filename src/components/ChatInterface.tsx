@@ -21,7 +21,8 @@ import {
   Sliders, 
   CheckCircle2, 
   Layers,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ChevronDown
 } from 'lucide-react';
 import { Message, ChatSession } from '../types';
 import { QUICK_PROMPTS } from '../data/standardGuideData';
@@ -53,6 +54,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [input, setInput] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [showMobileGuide, setShowMobileGuide] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -146,9 +148,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   ];
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4.5rem)] max-w-6xl mx-auto p-2 sm:p-4">
+    <div className="flex flex-col h-[calc(100dvh-8.5rem)] md:h-[calc(100vh-4.5rem)] max-w-6xl mx-auto p-2 sm:p-4">
       {/* Top Workspace Header */}
-      <div className="flex flex-wrap items-center justify-between gap-2 py-2.5 px-3.5 bg-slate-900/90 border border-slate-800 rounded-xl mb-3 shadow-xs">
+      <div className="hidden sm:flex flex-wrap items-center justify-between gap-2 py-2.5 px-3.5 bg-slate-900/90 border border-slate-800 rounded-xl mb-3 shadow-xs">
         <div className="flex items-center space-x-2.5 text-xs text-slate-300">
           <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-blue-500/10 text-blue-300 border border-blue-500/20 font-medium">
             <BookOpen className="w-3.5 h-3.5 text-blue-400" />
@@ -157,7 +159,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           <span className="text-slate-600 hidden sm:inline">|</span>
           <span className="font-medium text-slate-200 flex items-center gap-1.5 truncate max-w-[260px] sm:max-w-none">
             <FileText className="w-3.5 h-3.5 text-blue-400" />
-            <span>「2026 기상관측표준화 업무가이드」 (156p 전권)</span>
+            <span>「2026 기상관측표준화 업무가이드」 핵심 기준 DB</span>
           </span>
         </div>
 
@@ -223,28 +225,47 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       {isCleanEditor ? (
         /* ================= CLEAN EDITOR VIEW (깨끗한 에디터 창) ================= */
         <div className="flex-1 overflow-y-auto flex flex-col justify-between p-2 sm:p-4 bg-slate-900/40 border border-slate-800/80 rounded-2xl">
-          <div className="max-w-3xl mx-auto w-full py-4 space-y-6">
+          <div className="max-w-3xl mx-auto w-full py-2 sm:py-4 space-y-4 sm:space-y-6">
             
             {/* Minimalist Hero Badge & Title */}
-            <div className="text-center space-y-2">
-              <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-medium">
+            <div className="text-center space-y-2 px-1">
+              <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[11px] sm:text-xs font-medium">
                 <FileText className="w-3.5 h-3.5" />
-                <span>기상관측표준화법 전문 근거 업무지원 에디터</span>
+                <span className="sm:hidden">2026 업무가이드 기반 AI 비서</span>
+                <span className="hidden sm:inline">기상관측표준화법 전문 근거 업무지원 에디터</span>
               </div>
-              <h2 className="text-xl sm:text-2xl font-bold text-slate-100 tracking-tight">
-                무엇이든 질문하시면 명쾌하고 정확하게 답변합니다
+              <h2 className="text-lg sm:text-2xl font-bold text-slate-100 tracking-tight">
+                <span className="sm:hidden">무엇을 도와드릴까요?</span>
+                <span className="hidden sm:inline">무엇이든 질문하시면 명쾌하고 정확하게 답변합니다</span>
               </h2>
-              <p className="text-xs sm:text-sm text-slate-400 max-w-xl mx-auto">
-                모든 답변은 **「2026 기상관측표준화 업무가이드」(156p 전권)**의 법정 조항 및 수치 기준을 
+              <p className="text-xs sm:text-sm text-slate-400 max-w-xl mx-auto hidden sm:block">
+                모든 답변은 **「2026 기상관측표준화 업무가이드」 핵심 기준 DB**의 법정 조항 및 수치 기준을 
                 바탕으로 제공되며, 질의 완료 후 자동으로 **히스토리 파일**에 기록됩니다.
               </p>
+              <p className="text-xs text-slate-400 sm:hidden">
+                업무 분야를 선택하거나 아래에 바로 질문하세요.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowMobileGuide((open) => !open)}
+                className="sm:hidden inline-flex items-center gap-1 text-xs text-blue-400 py-1"
+                aria-expanded={showMobileGuide}
+              >
+                업무가이드 안내 {showMobileGuide ? '접기' : '자세히 보기'}
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showMobileGuide ? 'rotate-180' : ''}`} />
+              </button>
+              {showMobileGuide && (
+                <div className="sm:hidden text-left text-xs leading-relaxed text-slate-300 bg-slate-800/70 border border-slate-700 rounded-xl p-3">
+                  관측환경, 센서 설치, 측기검정, 자료연계·품질관리 기준을 2026 업무가이드의 근거 조항과 함께 안내합니다.
+                </div>
+              )}
             </div>
 
             {/* Category Filter Pills */}
-            <div className="flex flex-wrap items-center justify-center gap-1.5 pt-2">
+            <div className="flex overflow-x-auto sm:flex-wrap sm:items-center sm:justify-center gap-1.5 pt-1 sm:pt-2 pb-1 snap-x">
               <button
                 onClick={() => setActiveCategory('all')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                className={`shrink-0 px-3 py-2 sm:py-1.5 rounded-lg text-xs font-medium transition-all ${
                   activeCategory === 'all'
                     ? 'bg-blue-600 text-white shadow-xs'
                     : 'bg-slate-800 text-slate-300 hover:bg-slate-750 hover:text-white border border-slate-700'
@@ -259,7 +280,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   <button
                     key={cat.id}
                     onClick={() => setActiveCategory(cat.id)}
-                    className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    className={`shrink-0 flex items-center space-x-1.5 px-3 py-2 sm:py-1.5 rounded-lg text-xs font-medium transition-all ${
                       isSelected
                         ? 'bg-blue-600 text-white shadow-xs'
                         : 'bg-slate-800 text-slate-300 hover:bg-slate-750 hover:text-white border border-slate-700'
@@ -282,7 +303,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   key={i}
                   id={`clean-prompt-${i}`}
                   onClick={() => onSelectPrompt(prompt)}
-                  className="flex items-start justify-between text-left p-3 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700/70 hover:border-blue-500/50 transition-all group"
+                  className={`${i > 3 ? 'hidden sm:flex' : 'flex'} items-start justify-between text-left p-3 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700/70 hover:border-blue-500/50 transition-all group min-h-14`}
                 >
                   <span className="text-xs text-slate-200 group-hover:text-blue-300 leading-snug">
                     {prompt}
@@ -476,7 +497,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       )}
 
       {/* Input Form (Editor Box) */}
-      <form onSubmit={handleSubmit} className="mt-3 relative">
+      <form onSubmit={handleSubmit} className="mt-2 sm:mt-3 relative shrink-0">
         <div className="relative flex items-end bg-slate-900 border border-slate-700/80 rounded-2xl p-2.5 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/30 transition-all shadow-md">
           <textarea
             ref={inputRef}
@@ -484,9 +505,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="기상관측표준화 가이드, 10H 노장 이격거리, 옥상 풍속계 설치높이, 10종 측기검정 주기, 5대 QC 공식 등을 입력하세요... (Enter: 전송 / Shift+Enter: 줄바꿈)"
-            className="w-full bg-transparent text-slate-100 text-sm placeholder-slate-500 focus:outline-none resize-none max-h-36 min-h-[48px] py-1.5 px-3 leading-relaxed"
-            rows={2}
+            placeholder="궁금한 업무 기준을 입력하세요"
+            className="w-full bg-transparent text-slate-100 text-sm placeholder-slate-500 focus:outline-none resize-none max-h-36 min-h-[42px] sm:min-h-[48px] py-1.5 px-2 sm:px-3 leading-relaxed"
+            rows={1}
           />
           <div className="flex items-center space-x-1.5 pl-2 pb-0.5">
             <button
