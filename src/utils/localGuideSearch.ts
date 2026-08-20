@@ -23,6 +23,40 @@ const DOMAIN_TERMS = [...new Set(INTENTS.flatMap((intent) => intent.keywords))];
 const STOP_WORDS = new Set(['알려줘', '알려주세요', '무엇인가요', '어떻게', '기준은', '방법은', '대한', '관련', '질문', '업무가이드']);
 const normalize = (text: string) => text.toLowerCase().replace(/[^0-9a-z가-힣]/g, '');
 
+const NOT_FOUND_REPLY = '죄송합니다. 요청하신 내용에 대해서는 제공된 자료(파일) 내에서 확인되지 않습니다.';
+
+const formatAnswer = (title: string, facts: string[]) => {
+  const uniqueFacts = [...new Set(facts.filter(Boolean))];
+  const bodyFacts = uniqueFacts.slice(0, 3);
+  const summaryFacts = uniqueFacts.slice(0, 3);
+
+  return `질문에 답변드립니다.\n\n### ${title}\n\n${bodyFacts.map((fact) => `- ${fact}`).join('\n')}\n\n■ 핵심 요약\n1. ${summaryFacts[0]}\n2. ${summaryFacts[1]}\n3. ${summaryFacts[2]}`;
+};
+
+const SPECIAL_ANSWERS = [
+  {
+    keywords: ['자료입력', '입력예시', '엑셀작성', '엑셀자료', '제외기간', '업로드예시'],
+    title: '관측자료 엑셀 입력 예시',
+    bullets: [
+      '자료는 엑셀 3번 행부터 입력하고 1·2번 행은 삭제하지 않습니다.',
+      '기관코드·구분코드·지점번호·지점명이 등록정보와 일치해야 업로드됩니다.',
+      '제외기간은 8자리 숫자로 입력하고 셀 서식은 텍스트로 지정합니다.',
+      '상세사유는 장비교체, 통신불량, 장비이전처럼 구체적으로 작성합니다.',
+    ],
+    source: '「2026 기상관측표준화 업무가이드」 p.100',
+  },
+  {
+    keywords: ['자료구조', '파일포맷', '전문포맷', '전송형식', '수록규격', '관측자료예시'],
+    title: '관측자료 전송 형식',
+    bullets: [
+      '관측자료는 업무가이드 부록의 자료구조·자료내용·요소별 구조에 맞춰 전송합니다.',
+      '관측시각, 지점번호와 관측요소별 값의 순서·단위·결측값 표기를 동일하게 유지합니다.',
+      '실제 연계 전에는 수신기관의 최신 표준 전문 규격과 대조합니다.',
+    ],
+    source: '「2026 기상관측표준화 업무가이드」 Part 5 및 부록 5',
+  },
+];
+
 let documentIndexPromise: Promise<DocumentIndex | null> | null = null;
 const loadDocumentIndex = () => {
   if (!documentIndexPromise) {
@@ -109,12 +143,8 @@ const withEvidence = (
   matches: Array<{ page: number; excerpt: string }>,
 ): GuideSearchResult => {
   if (matches.length === 0) return result;
-  const evidence = matches
-    .map(({ page, excerpt }) => `#### 원문 p.${page}\n\n> ${excerpt.replace(/\n/g, '\n> ')}`)
-    .join('\n\n');
   return {
     ...result,
-    reply: `${result.reply}\n\n### 원문에서 찾은 관련 문단\n\n${evidence}`,
     sources: [...new Set([...result.sources, ...matches.map(({ page }) => `「2026 기상관측표준화 업무가이드」 p.${page}`)])],
   };
 };
@@ -122,24 +152,32 @@ const withEvidence = (
 export async function searchLocalGuide(query: string): Promise<GuideSearchResult> {
   const { normalized, terms } = getTerms(query);
   const documentMatches = await searchDocument(query);
+  const specialAnswer = SPECIAL_ANSWERS.find((answer) =>
+    answer.keywords.some((keyword) => normalized.includes(normalize(keyword))),
+  );
+
+  if (specialAnswer) {
+    return {
+      reply: formatAnswer(specialAnswer.title, specialAnswer.bullets),
+      sources: [specialAnswer.source],
+      suggestedQuestions: ['엑셀 업로드 실패 원인은?', '관측자료 품질검사 기준은?', '관측자료 연계 절차는?'],
+    };
+  }
+
   const intent = selectIntent(normalized);
   const topic = intent?.score > 0 ? STANDARD_GUIDE_TOPICS.find((item) => item.id === intent.topicId) : undefined;
 
   if (!topic) {
-    const result: GuideSearchResult = {
-      reply: documentMatches.length > 0
-        ? `질문하신 **「${query.trim()}」**와 관련된 원문 문단을 찾았습니다. 확실하지 않은 분야의 요약 답변은 표시하지 않고 원문 검색 결과만 제공합니다.`
-        : `질문하신 **「${query.trim()}」**와 직접 일치하는 내용을 찾지 못했습니다. 측기명, 업무명 또는 찾으려는 수치를 포함해 조금 더 구체적으로 질문해 주세요.`,
+    return {
+      reply: NOT_FOUND_REPLY,
       sources: [],
       suggestedQuestions: STANDARD_GUIDE_TOPICS.slice(0, 4).map((item) => item.frequentlyAsked[0]),
     };
-    return withEvidence(result, documentMatches);
   }
 
   const relevantStandards = topic.keyStandards
     .map((standard) => ({ standard, score: scoreText(standard, terms) }))
     .sort((a, b) => b.score - a.score)
-    .filter(({ score }, index) => score > 0 || index === 0)
     .slice(0, 3)
     .map(({ standard }) => standard);
 
@@ -151,12 +189,11 @@ export async function searchLocalGuide(query: string): Promise<GuideSearchResult
     .filter(({ score }) => score >= 8)
     .sort((a, b) => b.score - a.score)[0]?.item;
 
-  const sensorDetails = sensor
-    ? `\n\n### 관련 측기: ${sensor.element}\n\n- 설치 높이: ${sensor.height}\n- 설치 기준: ${sensor.installationRule}\n- 유지관리: ${sensor.maintenanceNote}\n- 검정주기: ${sensor.calibrationPeriod}`
-    : '';
+  const sensorFacts = sensor ? [`설치 높이: ${sensor.height}`, `설치 기준: ${sensor.installationRule}`] : [];
+  const answerFacts = [...relevantStandards, ...sensorFacts].slice(0, 3);
 
   const result: GuideSearchResult = {
-    reply: `### ${topic.title}\n\n질문과 직접 관련된 기준입니다.\n\n${relevantStandards.map((standard) => `- ${standard}`).join('\n')}${sensorDetails}\n\n---\n광주지방기상청 관측과(062-720-0553)`,
+    reply: formatAnswer(topic.title, answerFacts),
     sources: [topic.relatedArticles],
     suggestedQuestions: topic.frequentlyAsked,
   };
