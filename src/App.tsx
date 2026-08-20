@@ -6,7 +6,6 @@ import { StandardCalculator } from './components/StandardCalculator';
 import { SensorSpecsView } from './components/SensorSpecsView';
 import { HistoryDrawer } from './components/HistoryDrawer';
 import { Message, ChatSession } from './types';
-import { searchLocalGuide } from './utils/localGuideSearch';
 
 const INITIAL_MESSAGE: Message = {
   id: 'welcome-1',
@@ -96,24 +95,6 @@ export default function App() {
     setIsLoading(true);
 
     try {
-      const isStaticPages = window.location.hostname.endsWith('github.io');
-
-      if (isStaticPages) {
-        const data = await searchLocalGuide(text);
-        const assistantMsg: Message = {
-          id: `assistant-${Date.now()}`,
-          role: 'assistant',
-          content: data.reply,
-          timestamp: Date.now(),
-          sources: data.sources,
-          suggestedQuestions: data.suggestedQuestions,
-        };
-        const updatedMessages = [...newMessages, assistantMsg];
-        setMessages(updatedMessages);
-        saveAnsweredSession(text, updatedMessages);
-        return;
-      }
-
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -123,11 +104,11 @@ export default function App() {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error(`Server returned status ${response.status}`);
-      }
-
       const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || `서버 응답 오류 (${response.status})`);
+      }
 
       const assistantMsg: Message = {
         id: `assistant-${Date.now()}`,
