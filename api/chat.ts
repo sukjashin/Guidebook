@@ -1,4 +1,3 @@
-import { GoogleGenAI } from '@google/genai';
 import { retrieveGuidePassages } from '../server/guideSearch';
 
 export const maxDuration = 60;
@@ -31,36 +30,42 @@ const SYSTEM_INSTRUCTION = `# Role (역할)
 2. (두 번째 핵심 내용)
 3. (세 번째 핵심 내용)`;
 
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
-  status,
-  headers: {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Cache-Control': 'no-store',
-  },
-});
+interface VercelRequest {
+  method?: string;
+  body?: unknown;
+}
 
-async function answerQuestion(request: Request) {
+interface VercelResponse {
+  setHeader(name: string, value: string): void;
+  status(code: number): VercelResponse;
+  json(body: unknown): void;
+}
+
+async function answerQuestion(request: VercelRequest, response: VercelResponse) {
   try {
-    const body = await request.json() as { message?: unknown };
+    const body = (typeof request.body === 'string'
+      ? JSON.parse(request.body)
+      : request.body || {}) as { message?: unknown };
     const message = typeof body.message === 'string' ? body.message.trim() : '';
-    if (!message) return json({ error: '질문을 입력해 주세요.' }, 400);
-    if (message.length > 2000) return json({ error: '질문은 2,000자 이내로 입력해 주세요.' }, 413);
+    if (!message) return response.status(400).json({ error: '질문을 입력해 주세요.' });
+    if (message.length > 2000) return response.status(413).json({ error: '질문은 2,000자 이내로 입력해 주세요.' });
 
     const passages = retrieveGuidePassages(message);
     if (passages.length === 0) {
-      return json({ reply: NOT_FOUND_REPLY, sources: [], suggestedQuestions: [] });
+      return response.status(200).json({ reply: NOT_FOUND_REPLY, sources: [], suggestedQuestions: [] });
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return json({ error: 'Vercel 환경변수 GEMINI_API_KEY가 설정되지 않았습니다.' }, 503);
+      return response.status(503).json({ error: 'Vercel 환경변수 GEMINI_API_KEY가 설정되지 않았습니다.' });
     }
 
     const context = passages
       .map((passage) => `[업무가이드 p.${passage.page}]\n${passage.text}`)
       .join('\n\n---\n\n');
+    const { GoogleGenAI } = await import('@google/genai');
     const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
+    const aiResponse = await ai.models.generateContent({
       model: process.env.GEMINI_MODEL || 'gemini-3.7-flash',
       contents: `사용자 질문:\n${message}\n\n검색된 업무가이드 문단:\n${context}`,
       config: {
@@ -70,10 +75,10 @@ async function answerQuestion(request: Request) {
         maxOutputTokens: 900,
       },
     });
-    const reply = response.text?.trim();
-    if (!reply) return json({ reply: NOT_FOUND_REPLY, sources: [], suggestedQuestions: [] });
+    const reply = aiResponse.text?.trim();
+    if (!reply) return response.status(200).json({ reply: NOT_FOUND_REPLY, sources: [], suggestedQuestions: [] });
 
-    return json({
+    return response.status(200).json({
       reply,
       sources: ['「2026 기상관측표준화 업무가이드」(구글 드라이브 원문)'],
       suggestedQuestions: [
@@ -84,18 +89,17 @@ async function answerQuestion(request: Request) {
     });
   } catch (error) {
     console.error('Vercel chat function error:', error);
-    return json({ error: '답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.' }, 500);
+    return response.status(500).json({ error: '답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.' });
   }
 }
 
-export default {
-  async fetch(request: Request) {
-    if (request.method === 'GET') {
-      return json({ status: 'ok', service: 'Guidebook PDF RAG chatbot' });
-    }
-    if (request.method === 'POST') {
-      return answerQuestion(request);
-    }
-    return json({ error: '지원하지 않는 요청 방식입니다.' }, 405);
-  },
-};
+export default async function handler(request: VercelRequest, response: VercelResponse) {
+  response.setHeader('Cache-Control', 'no-store');
+  if (request.method === 'GET') {
+    return response.status(200).json({ status: 'ok', service: 'Guidebook PDF RAG chatbot' });
+  }
+  if (request.method === 'POST') {
+    return answerQuestion(request, response);
+  }
+  return response.status(405).json({ error: '지원하지 않는 요청 방식입니다.' });
+}
