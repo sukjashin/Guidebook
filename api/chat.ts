@@ -50,7 +50,7 @@ async function answerQuestion(request: VercelRequest, response: VercelResponse) 
     if (!message) return response.status(400).json({ error: '질문을 입력해 주세요.' });
     if (message.length > 2000) return response.status(413).json({ error: '질문은 2,000자 이내로 입력해 주세요.' });
 
-    const passages = retrieveGuidePassages(message);
+    const passages = await retrieveGuidePassages(message);
     if (passages.length === 0) {
       return response.status(200).json({ reply: NOT_FOUND_REPLY, sources: [], suggestedQuestions: [] });
     }
@@ -89,7 +89,11 @@ async function answerQuestion(request: VercelRequest, response: VercelResponse) 
     });
   } catch (error) {
     console.error('Vercel chat function error:', error);
-    return response.status(500).json({ error: '답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.' });
+    const detail = error instanceof Error ? error.message : '알 수 없는 오류';
+    return response.status(500).json({
+      error: '답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',
+      detail,
+    });
   }
 }
 

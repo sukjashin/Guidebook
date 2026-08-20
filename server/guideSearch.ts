@@ -1,4 +1,5 @@
-import guideIndex from '../public/data/guide-pages.json';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 
 interface GuidePage {
   page: number;
@@ -11,7 +12,21 @@ export interface GuidePassage {
   score: number;
 }
 
-const pages = guideIndex.pages as GuidePage[];
+let guidePagesPromise: Promise<GuidePage[]> | undefined;
+
+const loadGuidePages = () => {
+  if (!guidePagesPromise) {
+    const guidePath = path.join(process.cwd(), 'public', 'data', 'guide-pages.json');
+    guidePagesPromise = readFile(guidePath, 'utf8').then((contents) => {
+      const guideIndex = JSON.parse(contents) as { pages?: GuidePage[] };
+      if (!Array.isArray(guideIndex.pages) || guideIndex.pages.length !== 156) {
+        throw new Error('업무가이드 156페이지 검색 데이터가 올바르지 않습니다.');
+      }
+      return guideIndex.pages;
+    });
+  }
+  return guidePagesPromise;
+};
 const normalize = (text: string) => text.toLowerCase().replace(/[^0-9a-z가-힣]/g, '');
 const STOP_WORDS = new Set([
   '알려줘', '알려주세요', '보여줘', '보여주세요', '무엇인가요', '어떻게', '기준은', '방법은',
@@ -64,7 +79,8 @@ const getWeightedTerms = (query: string) => {
   return terms;
 };
 
-export function retrieveGuidePassages(query: string, limit = 8): GuidePassage[] {
+export async function retrieveGuidePassages(query: string, limit = 8): Promise<GuidePassage[]> {
+  const pages = await loadGuidePages();
   const terms = getWeightedTerms(query);
   if (terms.size === 0) return [];
 
