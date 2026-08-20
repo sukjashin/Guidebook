@@ -39,7 +39,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
   },
 });
 
-export async function POST(request: Request) {
+async function answerQuestion(request: Request) {
   try {
     const body = await request.json() as { message?: unknown };
     const message = typeof body.message === 'string' ? body.message.trim() : '';
@@ -88,6 +88,12 @@ export async function POST(request: Request) {
   }
 }
 
-export function GET() {
-  return json({ status: 'ok', service: 'Guidebook PDF RAG chatbot' });
+export default async function handler(request: Request) {
+  if (request.method === 'GET') {
+    return json({ status: 'ok', service: 'Guidebook PDF RAG chatbot' });
+  }
+  if (request.method === 'POST') {
+    return answerQuestion(request);
+  }
+  return json({ error: '지원하지 않는 요청 방식입니다.' }, 405);
 }
