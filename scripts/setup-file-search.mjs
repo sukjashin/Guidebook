@@ -9,6 +9,7 @@ const API_ROOT = 'https://generativelanguage.googleapis.com';
 const pdfPath = new URL('../tmp/pdfs/2026-weather-observation-guide.pdf', import.meta.url);
 const envPath = new URL('../.env.local', import.meta.url);
 const apiKey = process.env.GEMINI_API_KEY?.trim();
+const forceCreate = process.argv.includes('--force');
 
 if (!apiKey || apiKey === 'MY_GEMINI_API_KEY' || apiKey.includes('여기에_')) {
   throw new Error('프로젝트의 .env.local 파일에 GEMINI_API_KEY를 먼저 입력해 주세요.');
@@ -16,9 +17,10 @@ if (!apiKey || apiKey === 'MY_GEMINI_API_KEY' || apiKey.includes('여기에_')) 
 if (!existsSync(pdfPath)) {
   throw new Error('원본 PDF가 없습니다. 먼저 npm run sync:guide를 실행해 주세요.');
 }
-if (process.env.GEMINI_FILE_SEARCH_STORE?.trim()) {
+if (process.env.GEMINI_FILE_SEARCH_STORE?.trim() && !forceCreate) {
   console.log('이미 File Search 저장소가 등록되어 있습니다.');
   console.log(`GEMINI_FILE_SEARCH_STORE=${process.env.GEMINI_FILE_SEARCH_STORE.trim()}`);
+  console.log('새 저장소를 만들려면 npm run setup:file-search -- --force 를 실행하세요.');
   process.exit(0);
 }
 
@@ -43,13 +45,13 @@ const createResponse = await fetch(`${API_ROOT}/v1beta/fileSearchStores?key=${en
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
     displayName: '2026-weather-observation-standardization-guide',
-    embeddingModel: 'models/gemini-embedding-2',
   }),
 });
 const store = await parseResponse(createResponse, '저장소 생성');
 if (!store.name?.startsWith('fileSearchStores/')) {
   throw new Error('생성된 File Search 저장소 이름을 확인할 수 없습니다.');
 }
+console.log(`새 저장소: ${store.name}`);
 
 console.log('2/4 PDF 업로드를 준비합니다...');
 const fileInfo = await stat(pdfPath);
@@ -66,12 +68,6 @@ const startResponse = await fetch(
     },
     body: JSON.stringify({
       displayName: '2026 기상관측표준화 업무가이드.pdf',
-      chunkingConfig: {
-        whiteSpaceConfig: {
-          maxTokensPerChunk: 500,
-          maxOverlapTokens: 80,
-        },
-      },
     }),
   },
 );

@@ -4,6 +4,7 @@ const DRIVE_FILE_ID = '1mKGsdUcqDWuKhhFvduSwy9RAy46G36Ns';
 const DRIVE_DOWNLOAD_URL = `https://drive.usercontent.google.com/download?id=${DRIVE_FILE_ID}&export=download&confirm=t`;
 const GUIDE_DISPLAY_NAME = '2026 기상관측표준화 업무가이드.pdf';
 const DEFAULT_GUIDE_FILE_NAME = 'files/z36jgfed8tbx';
+const DEFAULT_FILE_SEARCH_STORE = 'fileSearchStores/2026weatherobservationstand-8m5v3hoo957q';
 const NOT_FOUND_REPLY = '죄송합니다. 요청하신 내용에 대해서는 제공된 자료(파일) 내에서 확인되지 않습니다.';
 const USD_TO_KRW = 1415;
 const INPUT_USD_PER_MILLION = 0.75;
@@ -88,7 +89,7 @@ function getGuideFile(ai: any) {
 }
 
 function calculateUsage(usageMetadata: any) {
-  const inputTokens = usageMetadata?.promptTokenCount || 0;
+  const inputTokens = (usageMetadata?.promptTokenCount || 0) + (usageMetadata?.toolUsePromptTokenCount || 0);
   const answerTokens = usageMetadata?.candidatesTokenCount || 0;
   const thinkingTokens = usageMetadata?.thoughtsTokenCount || 0;
   const outputTokens = answerTokens + thinkingTokens;
@@ -103,6 +104,47 @@ function calculateUsage(usageMetadata: any) {
   };
 }
 
+function mergeUsageMetadata(...items: any[]) {
+  return items.reduce((total, item) => ({
+    promptTokenCount: total.promptTokenCount + (item?.promptTokenCount || 0),
+    toolUsePromptTokenCount: total.toolUsePromptTokenCount + (item?.toolUsePromptTokenCount || 0),
+    candidatesTokenCount: total.candidatesTokenCount + (item?.candidatesTokenCount || 0),
+    thoughtsTokenCount: total.thoughtsTokenCount + (item?.thoughtsTokenCount || 0),
+    totalTokenCount: total.totalTokenCount + (item?.totalTokenCount || 0),
+  }), { promptTokenCount: 0, toolUsePromptTokenCount: 0, candidatesTokenCount: 0, thoughtsTokenCount: 0, totalTokenCount: 0 });
+}
+
+async function searchGuide(ai: any, message: string) {
+  const storeName = process.env.GEMINI_FILE_SEARCH_STORE || DEFAULT_FILE_SEARCH_STORE;
+  return ai.models.generateContent({
+    model: process.env.GEMINI_MODEL || 'gemini-3.7-flash',
+    contents: `「2026 기상관측표준화 업무가이드」에서 질문과 관련된 모든 표현, 표, 수치와 앞뒤 문맥을 검색하여 답변하십시오.\n\n질문: ${message}`,
+    config: {
+      systemInstruction: SYSTEM_INSTRUCTION,
+      tools: [{ fileSearch: { fileSearchStoreNames: [storeName] } }],
+      thinkingConfig: { thinkingLevel: 'LOW' },
+      maxOutputTokens: 900,
+    },
+  });
+}
+
+async function readFullGuide(ai: any, message: string) {
+  const { ThinkingLevel, createPartFromUri } = await import('@google/genai');
+  const guideFile = await getGuideFile(ai);
+  return ai.models.generateContent({
+    model: process.env.GEMINI_MODEL || 'gemini-3.7-flash',
+    contents: [{ role: 'user', parts: [
+      createPartFromUri(guideFile.uri, guideFile.mimeType),
+      { text: `첨부된 업무가이드 PDF 전체를 확인하여 다음 질문에 답변하십시오.\n\n질문: ${message}` },
+    ] }],
+    config: {
+      systemInstruction: SYSTEM_INSTRUCTION,
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+      maxOutputTokens: 900,
+    },
+  });
+}
+
 async function answerQuestion(request: VercelRequest, response: VercelResponse) {
   try {
     const body = (typeof request.body === 'string' ? JSON.parse(request.body) : request.body || {}) as { message?: unknown };
@@ -113,26 +155,33 @@ async function answerQuestion(request: VercelRequest, response: VercelResponse) 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return response.status(503).json({ error: 'Vercel 환경변수 GEMINI_API_KEY가 설정되지 않았습니다.' });
 
-    const { GoogleGenAI, ThinkingLevel, createPartFromUri } = await import('@google/genai');
+    const { GoogleGenAI } = await import('@google/genai');
     const ai = new GoogleGenAI({ apiKey });
-    const guideFile = await getGuideFile(ai);
-    const aiResponse = await ai.models.generateContent({
-      model: process.env.GEMINI_MODEL || 'gemini-3.7-flash',
-      contents: [{ role: 'user', parts: [
-        createPartFromUri(guideFile.uri, guideFile.mimeType),
-        { text: `첨부된 업무가이드 PDF 전체를 확인하여 다음 질문에 답변하십시오.\n\n질문: ${message}` },
-      ] }],
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        maxOutputTokens: 900,
-      },
-    });
+    let searchResponse: any;
+    let aiResponse: any;
+    let answerMode = 'file-search';
+    try {
+      searchResponse = await searchGuide(ai, message);
+      const groundingChunks = searchResponse.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+      const searchReply = searchResponse.text?.trim() || '';
+      if (groundingChunks.length > 0 && searchReply && searchReply !== NOT_FOUND_REPLY) {
+        aiResponse = searchResponse;
+      }
+    } catch (error) {
+      console.warn('Gemini File Search 실패, 원본 PDF 전체 확인으로 전환합니다.', error);
+    }
+    if (!aiResponse) {
+      answerMode = 'full-pdf-fallback';
+      const fullResponse = await readFullGuide(ai, message);
+      fullResponse.usageMetadata = mergeUsageMetadata(searchResponse?.usageMetadata, fullResponse.usageMetadata);
+      aiResponse = fullResponse;
+    }
 
     return response.status(200).json({
       reply: aiResponse.text?.trim() || NOT_FOUND_REPLY,
       sources: ['「2026 기상관측표준화 업무가이드」 원본 PDF 전체(156쪽)'],
       usage: calculateUsage(aiResponse.usageMetadata),
+      answerMode,
       suggestedQuestions: [
         '풍향·풍속계의 표준 설치 높이는?',
         '검정 수수료 면제 신청 기한은?',

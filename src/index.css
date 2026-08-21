@@ -1,1 +1,121 @@
 @import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  font-synthesis: none;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(56, 189, 248, 0.16), transparent 34rem),
+    linear-gradient(145deg, #f8fbff 0%, #eef6ff 52%, #f7fbff 100%);
+  color: #0f172a;
+}
+
+/* 밝고 신뢰감 있는 공공서비스용 라이트 테마 */
+[class~="bg-slate-950"] {
+  background-color: transparent !important;
+}
+
+[class~="bg-slate-950/40"],
+[class~="bg-slate-950/90"] {
+  background-color: #f8fafc !important;
+}
+
+[class~="bg-slate-900"],
+[class~="bg-slate-900/80"],
+[class~="bg-slate-900/90"] {
+  background-color: rgba(255, 255, 255, 0.96) !important;
+}
+
+[class~="bg-slate-900/40"],
+[class~="bg-slate-900/50"],
+[class~="bg-slate-900/70"] {
+  background-color: rgba(241, 245, 249, 0.82) !important;
+}
+
+[class~="bg-slate-800"],
+[class~="bg-slate-800/90"],
+[class~="bg-slate-800/80"],
+[class~="bg-slate-800/70"],
+[class~="bg-slate-800/60"],
+[class~="bg-slate-800/50"],
+[class~="bg-slate-800/40"] {
+  background-color: #f1f5f9 !important;
+}
+
+[class~="border-slate-800"],
+[class~="border-slate-800/80"] {
+  border-color: #dbeafe !important;
+}
+
+[class~="border-slate-700"],
+[class~="border-slate-700/80"],
+[class~="border-slate-700/70"],
+[class~="border-slate-700/60"],
+[class~="border-slate-700/50"],
+[class~="border-slate-700/40"] {
+  border-color: #cbd5e1 !important;
+}
+
+[class~="text-slate-100"],
+[class~="text-slate-200"] {
+  color: #0f172a !important;
+}
+
+[class~="text-slate-300"] {
+  color: #334155 !important;
+}
+
+[class~="text-slate-400"] {
+  color: #475569 !important;
+}
+
+[class~="text-slate-500"] {
+  color: #64748b !important;
+}
+
+[class~="text-slate-600"] {
+  color: #94a3b8 !important;
+}
+
+[class~="text-blue-300"],
+[class~="text-blue-400"] {
+  color: #1d4ed8 !important;
+}
+
+.prose-invert {
+  --tw-prose-body: #334155;
+  --tw-prose-headings: #0f172a;
+  --tw-prose-lead: #475569;
+  --tw-prose-links: #1d4ed8;
+  --tw-prose-bold: #0f172a;
+  --tw-prose-counters: #475569;
+  --tw-prose-bullets: #2563eb;
+  --tw-prose-hr: #cbd5e1;
+  --tw-prose-quotes: #334155;
+  --tw-prose-quote-borders: #60a5fa;
+  --tw-prose-captions: #64748b;
+  --tw-prose-code: #1d4ed8;
+  --tw-prose-pre-code: #334155;
+  --tw-prose-pre-bg: #f1f5f9;
+  --tw-prose-th-borders: #cbd5e1;
+  --tw-prose-td-borders: #e2e8f0;
+}
+
+header[class*="bg-slate-900"] {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-bottom-color: #bfdbfe !important;
+  box-shadow: 0 8px 30px rgba(37, 99, 235, 0.08);
+  backdrop-filter: blur(14px);
+}
+
+main > div {
+  animation: bright-entry 360ms ease-out both;
+}
+
+@keyframes bright-entry {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
