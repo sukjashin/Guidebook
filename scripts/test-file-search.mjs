@@ -13,11 +13,11 @@ const ai = new GoogleGenAI({ apiKey });
 const startedAt = Date.now();
 const response = await ai.models.generateContent({
   model: process.env.GEMINI_MODEL || 'gemini-3.7-flash',
-  contents: `「2026 기상관측표준화 업무가이드」만 근거로 다음 질문에 답변하십시오.\n\n질문: ${question}`,
+  contents: `반드시 File Search 도구를 사용하여 「2026 기상관측표준화 업무가이드」에서 관련 규정, 일정, 절차와 수치를 먼저 찾고 질문에 끝까지 답변하십시오.\n\n질문: ${question}`,
   config: {
     tools: [{ fileSearch: { fileSearchStoreNames: [storeName] } }],
     thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-    maxOutputTokens: 700,
+    maxOutputTokens: 2400,
   },
 });
 

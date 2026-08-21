@@ -24,6 +24,10 @@ const SYSTEM_INSTRUCTION = `# 역할
 # 답변 방식
 - 전문적이고 정중한 경어를 사용합니다.
 - 질문에 필요한 결론과 수치만 모바일에서 읽기 쉽게 간결하게 작성합니다.
+- 일반적인 기준·절차 답변은 핵심 요약을 포함하여 한글 기준 800자 이내로 작성합니다.
+- 이메일·공문·안내문 작성 요청은 필요한 문안을 완결하되 한글 기준 1,800자 이내로 작성합니다.
+- 사용자가 자세한 설명을 명시적으로 요청한 경우에만 위 분량보다 길게 작성합니다.
+- 여러 질문이 포함되면 각 항목을 짧게 구분하고 중요한 내용부터 답변합니다.
 - 답변은 다음 형식을 사용합니다.
 
 질문에 답변드립니다.
@@ -118,12 +122,12 @@ async function searchGuide(ai: any, message: string) {
   const storeName = process.env.GEMINI_FILE_SEARCH_STORE || DEFAULT_FILE_SEARCH_STORE;
   return ai.models.generateContent({
     model: process.env.GEMINI_MODEL || 'gemini-3.7-flash',
-    contents: `「2026 기상관측표준화 업무가이드」에서 질문과 관련된 모든 표현, 표, 수치와 앞뒤 문맥을 검색하여 답변하십시오.\n\n질문: ${message}`,
+    contents: `반드시 File Search 도구를 사용하여 「2026 기상관측표준화 업무가이드」에서 질문과 관련된 규정, 일정, 절차, 표, 수치와 앞뒤 문맥을 먼저 찾으십시오. 메일·공문·안내문 작성 요청도 검색한 업무가이드 근거만 반영하여 문안을 끝까지 완성하십시오.\n\n질문: ${message}`,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
       tools: [{ fileSearch: { fileSearchStoreNames: [storeName] } }],
       thinkingConfig: { thinkingLevel: 'LOW' },
-      maxOutputTokens: 900,
+      maxOutputTokens: 2400,
     },
   });
 }
@@ -140,7 +144,7 @@ async function readFullGuide(ai: any, message: string) {
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
       thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-      maxOutputTokens: 900,
+      maxOutputTokens: 2400,
     },
   });
 }
