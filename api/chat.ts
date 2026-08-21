@@ -3,6 +3,7 @@ export const maxDuration = 60;
 const DRIVE_FILE_ID = '1mKGsdUcqDWuKhhFvduSwy9RAy46G36Ns';
 const DRIVE_DOWNLOAD_URL = `https://drive.usercontent.google.com/download?id=${DRIVE_FILE_ID}&export=download&confirm=t`;
 const GUIDE_DISPLAY_NAME = '2026 기상관측표준화 업무가이드.pdf';
+const DEFAULT_GUIDE_FILE_NAME = 'files/z36jgfed8tbx';
 const NOT_FOUND_REPLY = '죄송합니다. 요청하신 내용에 대해서는 제공된 자료(파일) 내에서 확인되지 않습니다.';
 const USD_TO_KRW = 1415;
 const INPUT_USD_PER_MILLION = 0.75;
@@ -44,12 +45,15 @@ interface ReusableGuideFile { name: string; uri: string; mimeType: string; }
 let guideFilePromise: Promise<ReusableGuideFile> | undefined;
 
 async function findOrUploadGuideFile(ai: any): Promise<ReusableGuideFile> {
-  const files = await ai.files.list({ config: { pageSize: 100 } });
-  for await (const file of files) {
+  const savedFileName = process.env.GEMINI_GUIDE_FILE || DEFAULT_GUIDE_FILE_NAME;
+  try {
+    const file = await ai.files.get({ name: savedFileName });
     const expiresAt = file.expirationTime ? Date.parse(file.expirationTime) : 0;
-    if (file.displayName === GUIDE_DISPLAY_NAME && file.state === 'ACTIVE' && file.name && file.uri && expiresAt > Date.now() + 300_000) {
+    if (file.state === 'ACTIVE' && file.name && file.uri && expiresAt > Date.now() + 300_000) {
       return { name: file.name, uri: file.uri, mimeType: file.mimeType || 'application/pdf' };
     }
+  } catch (error) {
+    console.warn('저장된 Gemini PDF를 재사용할 수 없어 다시 업로드합니다.', error);
   }
 
   const driveResponse = await fetch(DRIVE_DOWNLOAD_URL);
