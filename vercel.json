@@ -4,9 +4,6 @@
   "buildCommand": "npm run build:vercel",
   "outputDirectory": "dist",
   "functions": {
-    "api/chat.ts": {
-      "maxDuration": 60,
-      "includeFiles": "public/data/guide-pages.json"
-    }
+    "api/chat.ts": { "maxDuration": 60 }
   }
 }

@@ -6,6 +6,14 @@ export interface Message {
   sources?: string[];
   suggestedQuestions?: string[];
   isStreaming?: boolean;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    estimatedCostUsd: number;
+    estimatedCostKrw: number;
+    priceBasis: string;
+  };
 }
 
 export interface ChatSession {

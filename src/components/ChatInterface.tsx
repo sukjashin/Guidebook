@@ -423,6 +423,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                       </div>
                     )}
 
+                    {msg.usage && (
+                      <div className="mt-2 text-[11px] text-slate-500" title={msg.usage.priceBasis}>
+                        예상 사용량: 입력 {msg.usage.inputTokens.toLocaleString()} · 출력 {msg.usage.outputTokens.toLocaleString()} 토큰
+                        {' · '}약 ${msg.usage.estimatedCostUsd.toFixed(4)} ({msg.usage.estimatedCostKrw.toLocaleString()}원)
+                      </div>
+                    )}
+
                     {/* Suggested Follow-up Questions */}
                     {msg.suggestedQuestions && msg.suggestedQuestions.length > 0 && (
                       <div className="mt-3 pt-2">

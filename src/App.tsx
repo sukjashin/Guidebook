@@ -123,6 +123,7 @@ export default function App() {
         timestamp: Date.now(),
         sources: data.sources || ['「2026 기상관측표준화 업무가이드」'],
         suggestedQuestions: data.suggestedQuestions || [],
+        usage: data.usage,
       };
 
       const updatedMessages = [...newMessages, assistantMsg];
