@@ -7,6 +7,12 @@ import { SensorSpecsView } from "./components/SensorSpecsView";
 import { HistoryDrawer } from "./components/HistoryDrawer";
 import { Message, ChatSession } from "./types";
 
+const CHAT_API_URL =
+  import.meta.env.VITE_CHAT_API_URL?.trim() ||
+  (window.location.hostname.endsWith("github.io")
+    ? "https://guidebook-sage.vercel.app/api/chat"
+    : "/api/chat");
+
 const INITIAL_MESSAGE: Message = {
   id: "welcome-1",
   role: "assistant",
@@ -101,7 +107,13 @@ export default function App() {
     setIsLoading(true);
 
     try {
-      const response = await fetch("/api/chat", {
+      if (window.location.hostname.endsWith("github.io") && CHAT_API_URL.startsWith("/")) {
+        throw new Error(
+          "GitHub Pages에는 챗봇 서버가 없습니다. 저장소의 VITE_CHAT_API_URL을 Vercel API 주소로 설정해 주세요.",
+        );
+      }
+
+      const response = await fetch(CHAT_API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
