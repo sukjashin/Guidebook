@@ -80,6 +80,44 @@ function findRelevantPages(message: string): GuidePage[] {
     .map(({ page }) => page);
 }
 
+function buildReadableEvidenceAnswer(message: string, pages: GuidePage[]) {
+  const terms = [...new Set(message.toLowerCase().split(/[^0-9a-z가-힣]+/)
+    .map(normalize)
+    .filter((term) => term.length >= 2 && !STOP_WORDS.has(term)))];
+  const candidates = pages.slice(0, 3).flatMap((page) => {
+    const lines = page.text.split(/\n+/)
+      .map((line) => line.replace(/\s+/g, ' ').trim())
+      .filter((line) => line.length >= 8)
+      .filter((line) => !/^\d+\s*\|/.test(line) && !/^Part\s+\d+/i.test(line));
+    return lines.map((line, index) => {
+      const matched = terms.filter((term) => normalize(line).includes(term));
+      const context = [line];
+      for (let offset = 1; offset <= 2 && context.join(' ').length < 220; offset += 1) {
+        const next = lines[index + offset];
+        if (!next || /^\d+\.\d+\s/.test(next)) break;
+        context.push(next);
+        if (/[.!?。]$/.test(next)) break;
+      }
+      return {
+        page: page.page,
+        text: context.join(' ').slice(0, 260),
+        score: matched.reduce((score, term) => score + Math.min(term.length, 8), 0) + matched.length * 2,
+      };
+    });
+  });
+  const seen = new Set<string>();
+  const facts = candidates.filter(({ score }) => score > 0).sort((a, b) => b.score - a.score)
+    .filter(({ text }) => {
+      const key = normalize(text).slice(0, 80);
+      if (!key || [...seen].some((saved) => saved.includes(key) || key.includes(saved))) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, 5);
+  if (facts.length === 0) return NOT_FOUND_REPLY;
+  const evidencePages = [...new Set(facts.map(({ page }) => page))];
+  return `질문에 답변드립니다.\n\n### 확인된 핵심 기준\n\n${facts.map(({ text }, index) => `${index + 1}. ${text}`).join('\n')}\n\n### 근거\n\n- 「2026 기상관측표준화 업무가이드」 ${evidencePages.map((page) => `p.${page}`).join(', ')}\n\n■ 한눈에 보기\n\n${facts.slice(0, 3).map(({ text }) => `- ${text}`).join('\n')}`;
+}
+
 function answerWithoutAi(message: string, pages: GuidePage[]) {
   const query = normalize(message);
   if ((query.includes('풍향') || query.includes('풍속')) && (query.includes('설치') || query.includes('옥상'))) {
@@ -101,13 +139,7 @@ function answerWithoutAi(message: string, pages: GuidePage[]) {
     return `질문에 답변드립니다.\n\n- 20cm 수수구 기준 500ml 생수병 1병은 강수량 15.9mm에 해당합니다.\n- 물을 약 10분 동안 일정하게 주입합니다.\n- 0.5mm 전도형 강수량계는 30~33회 전도되는지 확인합니다.\n\n■ 핵심 요약\n1. 500ml는 15.9mm입니다.\n2. 10분간 균일하게 주입합니다.\n3. 정상 전도 횟수는 30~33회입니다.`;
   }
   if (pages.length > 0) {
-    const bestPage = pages[0];
-    const excerpt = bestPage.text
-      .replace(/^\s*\d+\s*\|[^\n]*\n?/, '')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim()
-      .slice(0, 1800);
-    return `질문에 답변드립니다.\n\n### 업무가이드 p.${bestPage.page}에서 확인한 관련 내용\n\n${excerpt}\n\n■ 확인 안내\n위 내용은 질문과 가장 관련성이 높은 업무가이드 원문 페이지에서 추출했습니다.`;
+    return buildReadableEvidenceAnswer(message, pages);
   }
   return NOT_FOUND_REPLY;
 }
