@@ -172,6 +172,7 @@ export const GuideExplorer: React.FC<GuideExplorerProps> = ({ onAskTopic }) => {
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
+                    del: ({ node, ...props }) => <span {...props} />,
                     table: ({ node, ...props }) => (
                       <div className="overflow-x-auto my-3 border border-slate-700 rounded-lg">
                         <table className="w-full text-xs text-left border-collapse" {...props} />
@@ -188,7 +189,7 @@ export const GuideExplorer: React.FC<GuideExplorerProps> = ({ onAskTopic }) => {
                     ),
                   }}
                 >
-                  {selectedTopic.details}
+                  {selectedTopic.details.replace(/~~/g, '~')}
                 </ReactMarkdown>
               </div>
 
