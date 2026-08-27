@@ -98,19 +98,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   return (
     <div className="flex flex-col h-[calc(100dvh-8.5rem)] md:h-[calc(100vh-4.5rem)] max-w-6xl mx-auto p-2 sm:p-4">
       {/* Top Workspace Header */}
-      <div className="hidden sm:flex flex-wrap items-center justify-between gap-2 py-2.5 px-3.5 bg-slate-900/90 border border-slate-800 rounded-xl mb-3 shadow-xs">
-        <div className="flex items-center space-x-2.5 text-xs text-slate-300">
-          <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-blue-500/10 text-blue-300 border border-blue-500/20 font-medium">
-            <BookOpen className="w-3.5 h-3.5 text-blue-400" />
-            <span>근거 문서</span>
-          </div>
-          <span className="text-slate-600 hidden sm:inline">|</span>
-          <span className="font-medium text-slate-200 flex items-center gap-1.5 truncate max-w-[260px] sm:max-w-none">
-            <FileText className="w-3.5 h-3.5 text-blue-400" />
-            <span>「2026 기상관측표준화 업무가이드」 핵심 기준 DB</span>
-          </span>
-        </div>
-
+      {!isCleanEditor && (
+      <div className="hidden sm:flex flex-wrap items-center justify-end gap-2 py-2.5 px-3.5 bg-slate-900/90 border border-slate-800 rounded-xl mb-3 shadow-xs">
         {/* Right Actions: New clean session, Export */}
         <div className="flex items-center space-x-1.5">
           {/* New Clean Question / Editor Button */}
@@ -152,6 +141,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           )}
         </div>
       </div>
+      )}
 
       {/* Main Content Area */}
       {isCleanEditor ? (
@@ -161,22 +151,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             
             {/* Minimalist Hero Badge & Title */}
             <div className="text-center space-y-2 px-1">
-              <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[11px] sm:text-xs font-medium">
-                <FileText className="w-3.5 h-3.5" />
-                <span className="sm:hidden">2026 업무가이드 기반 AI 비서</span>
-                <span className="hidden sm:inline">기상관측표준화법 전문 근거 업무지원 에디터</span>
-              </div>
-              <h2 className="text-lg sm:text-2xl font-bold text-slate-100 tracking-tight">
-                <span className="sm:hidden">무엇을 도와드릴까요?</span>
-                <span className="hidden sm:inline">무엇이든 질문하시면 명쾌하고 정확하게 답변합니다</span>
+              <h2 className="mx-auto max-w-2xl text-base font-semibold leading-relaxed text-slate-100 sm:text-xl">
+                안녕하십니까? 광주지방기상청 관측과 기상관측표준화 AI 챗봇 &apos;관측e비서&apos;입니다. 궁금하신 점을 질문해 주시면 정확하고 명쾌하게 답변해 드리겠습니다.
               </h2>
-              <p className="text-xs sm:text-sm text-slate-400 max-w-xl mx-auto hidden sm:block">
-                모든 답변은 **「2026 기상관측표준화 업무가이드」 핵심 기준 DB**의 법정 조항 및 수치 기준을 
-                바탕으로 제공되며, 질의 완료 후 자동으로 **히스토리 파일**에 기록됩니다.
-              </p>
-              <p className="text-xs text-slate-400 sm:hidden">
-                업무 분야를 선택하거나 아래에 바로 질문하세요.
-              </p>
               <button
                 type="button"
                 onClick={() => setShowMobileGuide((open) => !open)}

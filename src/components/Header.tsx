@@ -1,5 +1,5 @@
 import React from 'react';
-import { CloudSun, BookOpen, CheckSquare, MessageSquare, FileText, History } from 'lucide-react';
+import { CloudSun, BookOpen, CheckSquare, MessageSquare, History } from 'lucide-react';
 
 interface HeaderProps {
   activeTab: 'chat' | 'handbook' | 'calculator' | 'specs';
@@ -25,21 +25,9 @@ export const Header: React.FC<HeaderProps> = ({
               <CloudSun className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div>
-              <div className="flex items-center space-x-2">
-                <h1 className="font-bold text-sm sm:text-lg text-slate-100 tracking-tight">
-                  관측e비서
-                </h1>
-                <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                  AI 챗봇 & 업무지원
-                </span>
-                <span className="hidden lg:inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
-                  <FileText className="w-3.5 h-3.5 text-blue-400" />
-                  <span>근거: 2026 기상관측표준화 업무가이드(156p)</span>
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 hidden sm:block">
-                기상청 기상관측표준화법 · 관측환경 10H 기준 · 센서 규격 · 측기검정 · 5대 QC 가이드
-              </p>
+              <h1 className="font-bold text-sm sm:text-lg text-slate-100 tracking-tight">
+                관측e비서
+              </h1>
             </div>
           </div>
 
