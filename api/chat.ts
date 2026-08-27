@@ -1,9 +1,7 @@
 export const maxDuration = 60;
 
-const DRIVE_FILE_ID = '1mKGsdUcqDWuKhhFvduSwy9RAy46G36Ns';
-const DRIVE_DOWNLOAD_URL = `https://drive.usercontent.google.com/download?id=${DRIVE_FILE_ID}&export=download&confirm=t`;
-const GUIDE_DISPLAY_NAME = '2026 기상관측표준화 업무가이드.pdf';
-const DEFAULT_GUIDE_FILE_NAME = 'files/z36jgfed8tbx';
+import guideIndex from '../public/data/guide-pages.json';
+
 const DEFAULT_FILE_SEARCH_STORE = 'fileSearchStores/2026weatherobservationstand-8m5v3hoo957q';
 const NOT_FOUND_REPLY = '죄송합니다. 요청하신 내용에 대해서는 제공된 자료(파일) 내에서 확인되지 않습니다.';
 const USD_TO_KRW = 1415;
@@ -45,51 +43,29 @@ interface VercelResponse {
   status(code: number): VercelResponse;
   json(body: unknown): void;
 }
-interface ReusableGuideFile { name: string; uri: string; mimeType: string; }
+interface GuidePage { page: number; text: string; }
 
-let guideFilePromise: Promise<ReusableGuideFile> | undefined;
+const STOP_WORDS = new Set(['알려줘', '알려주세요', '무엇인가요', '어떻게', '기준은', '방법은', '대한', '관련', '질문']);
+const normalize = (text: string) => text.toLowerCase().replace(/[^0-9a-z가-힣]/g, '');
 
-async function findOrUploadGuideFile(ai: any): Promise<ReusableGuideFile> {
-  const savedFileName = process.env.GEMINI_GUIDE_FILE || DEFAULT_GUIDE_FILE_NAME;
-  try {
-    const file = await ai.files.get({ name: savedFileName });
-    const expiresAt = file.expirationTime ? Date.parse(file.expirationTime) : 0;
-    if (file.state === 'ACTIVE' && file.name && file.uri && expiresAt > Date.now() + 300_000) {
-      return { name: file.name, uri: file.uri, mimeType: file.mimeType || 'application/pdf' };
-    }
-  } catch (error) {
-    console.warn('저장된 Gemini PDF를 재사용할 수 없어 다시 업로드합니다.', error);
-  }
+function findRelevantPages(message: string): GuidePage[] {
+  const terms = [...new Set(message.toLowerCase().split(/[^0-9a-z가-힣]+/)
+    .map(normalize)
+    .filter((term) => term.length >= 2 && !STOP_WORDS.has(term)))];
+  if (terms.length === 0) return [];
 
-  const driveResponse = await fetch(DRIVE_DOWNLOAD_URL);
-  if (!driveResponse.ok) throw new Error(`Google Drive PDF 다운로드 실패 (HTTP ${driveResponse.status})`);
-  const pdfBytes = await driveResponse.arrayBuffer();
-  if (new TextDecoder('ascii').decode(pdfBytes.slice(0, 5)) !== '%PDF-') {
-    throw new Error('Google Drive에서 PDF 형식이 아닌 응답을 받았습니다.');
-  }
-
-  let uploaded = await ai.files.upload({
-    file: new Blob([pdfBytes], { type: 'application/pdf' }),
-    config: { mimeType: 'application/pdf', displayName: GUIDE_DISPLAY_NAME },
-  });
-  for (let attempt = 0; uploaded.state === 'PROCESSING' && attempt < 22; attempt += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    uploaded = await ai.files.get({ name: uploaded.name });
-  }
-  if (uploaded.state !== 'ACTIVE' || !uploaded.name || !uploaded.uri) {
-    throw new Error(`Gemini PDF 준비 실패 (상태: ${uploaded.state || '알 수 없음'})`);
-  }
-  return { name: uploaded.name, uri: uploaded.uri, mimeType: uploaded.mimeType || 'application/pdf' };
-}
-
-function getGuideFile(ai: any) {
-  if (!guideFilePromise) {
-    guideFilePromise = findOrUploadGuideFile(ai).catch((error) => {
-      guideFilePromise = undefined;
-      throw error;
-    });
-  }
-  return guideFilePromise;
+  return (guideIndex.pages as GuidePage[])
+    .map((page) => {
+      const corpus = normalize(page.text);
+      const matched = terms.filter((term) => corpus.includes(term));
+      const score = matched.reduce((total, term) => total + Math.min(term.length, 8), 0)
+        + (matched.length === terms.length ? 12 : matched.length * 2);
+      return { page, score };
+    })
+    .filter(({ score }) => score >= 6)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 6)
+    .map(({ page }) => page);
 }
 
 function calculateUsage(usageMetadata: any) {
@@ -132,18 +108,15 @@ async function searchGuide(ai: any, message: string) {
   });
 }
 
-async function readFullGuide(ai: any, message: string) {
-  const { ThinkingLevel, createPartFromUri } = await import('@google/genai');
-  const guideFile = await getGuideFile(ai);
+async function answerFromLocalIndex(ai: any, message: string, pages: GuidePage[]) {
+  if (pages.length === 0) return undefined;
+  const excerpts = pages.map(({ page, text }) => `[업무가이드 ${page}쪽]\n${text}`).join('\n\n');
   return ai.models.generateContent({
     model: process.env.GEMINI_MODEL || 'gemini-3.7-flash',
-    contents: [{ role: 'user', parts: [
-      createPartFromUri(guideFile.uri, guideFile.mimeType),
-      { text: `첨부된 업무가이드 PDF 전체를 확인하여 다음 질문에 답변하십시오.\n\n질문: ${message}` },
-    ] }],
+    contents: `아래 내용은 「2026 기상관측표준화 업무가이드」에서 질문과 관련성이 높은 쪽을 추출한 것입니다. 아래 근거만 사용해 답하고, 근거가 부족하면 지정된 자료 없음 문구로 답하십시오.\n\n${excerpts}\n\n질문: ${message}`,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
-      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+      thinkingConfig: { thinkingLevel: 'LOW' },
       maxOutputTokens: 2400,
     },
   });
@@ -163,27 +136,39 @@ async function answerQuestion(request: VercelRequest, response: VercelResponse) 
     const ai = new GoogleGenAI({ apiKey });
     let searchResponse: any;
     let aiResponse: any;
+    let sourcePages: GuidePage[] = [];
     let answerMode = 'file-search';
     try {
       searchResponse = await searchGuide(ai, message);
-      const groundingChunks = searchResponse.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
       const searchReply = searchResponse.text?.trim() || '';
-      if (groundingChunks.length > 0 && searchReply && searchReply !== NOT_FOUND_REPLY) {
+      // File Search가 답변을 반환했으면 grounding 메타데이터 유무와 관계없이 사용한다.
+      // 메타데이터는 모델/SDK 버전에 따라 생략될 수 있으며, 이를 실패로 취급하면
+      // 매 요청마다 큰 PDF를 다시 업로드하게 되어 서버리스 시간 제한을 초과한다.
+      if (searchReply) {
         aiResponse = searchResponse;
       }
     } catch (error) {
       console.warn('Gemini File Search 실패, 원본 PDF 전체 확인으로 전환합니다.', error);
     }
     if (!aiResponse) {
-      answerMode = 'full-pdf-fallback';
-      const fullResponse = await readFullGuide(ai, message);
-      fullResponse.usageMetadata = mergeUsageMetadata(searchResponse?.usageMetadata, fullResponse.usageMetadata);
-      aiResponse = fullResponse;
+      answerMode = 'local-index-fallback';
+      sourcePages = findRelevantPages(message);
+      const localResponse = await answerFromLocalIndex(ai, message, sourcePages);
+      if (localResponse) {
+        localResponse.usageMetadata = mergeUsageMetadata(searchResponse?.usageMetadata, localResponse.usageMetadata);
+        aiResponse = localResponse;
+      }
+    }
+
+    if (!aiResponse) {
+      return response.status(200).json({ reply: NOT_FOUND_REPLY, sources: [], answerMode });
     }
 
     return response.status(200).json({
       reply: aiResponse.text?.trim() || NOT_FOUND_REPLY,
-      sources: ['「2026 기상관측표준화 업무가이드」 원본 PDF 전체(156쪽)'],
+      sources: sourcePages.length > 0
+        ? sourcePages.map(({ page }) => `「2026 기상관측표준화 업무가이드」 p.${page}`)
+        : ['「2026 기상관측표준화 업무가이드」 원본 PDF 전체(156쪽)'],
       usage: calculateUsage(aiResponse.usageMetadata),
       answerMode,
       suggestedQuestions: [
