@@ -2,6 +2,7 @@ export const maxDuration = 60;
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { STANDARD_GUIDE_TOPICS } from '../src/data/standardGuideData';
 
 const DEFAULT_FILE_SEARCH_STORE = 'fileSearchStores/2026weatherobservationstand-8m5v3hoo957q';
 const NOT_FOUND_REPLY = '죄송합니다. 요청하신 내용에 대해서는 제공된 자료(파일) 내에서 확인되지 않습니다.';
@@ -91,7 +92,17 @@ function answerWithoutAi(message: string) {
     return `질문에 답변드립니다.\n\n- 검정 유효기간 3년: 온도계, 기압계, 습도계, 풍향계, 풍속계, 강수량계\n- 검정 유효기간 5년: 일조계, 일사계, 증발계, 적설계\n- 검정 수수료는 유효기간 만료 10일 전까지 신청하면 전액 면제됩니다.\n\n■ 핵심 요약\n1. 주요 측기 유효기간은 3년입니다.\n2. 일조·일사·증발·적설계는 5년입니다.\n3. 만료 10일 전까지 신청해야 수수료가 면제됩니다.`;
   }
 
-  return NOT_FOUND_REPLY;
+  const terms = message.toLowerCase().split(/[^0-9a-z가-힣]+/).map(normalize).filter((term) => term.length >= 2);
+  const topic = STANDARD_GUIDE_TOPICS
+    .map((item) => {
+      const corpus = normalize(`${item.title} ${item.summary} ${item.keyStandards.join(' ')} ${item.frequentlyAsked.join(' ')}`);
+      return {
+        item,
+        score: terms.reduce((score, term) => score + (corpus.includes(term) ? Math.min(term.length, 8) : 0), 0),
+      };
+    })
+    .sort((a, b) => b.score - a.score)[0];
+  return topic?.score >= 4 ? topic.item.details : NOT_FOUND_REPLY;
 }
 
 function isQuotaError(error: unknown) {

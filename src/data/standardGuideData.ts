@@ -1,4 +1,4 @@
-import { GuideTopic, SensorStandard, ChecklistItem } from '../types';
+import type { GuideTopic, SensorStandard, ChecklistItem } from '../types';
 
 export const STANDARD_GUIDE_TOPICS: GuideTopic[] = [
   {
