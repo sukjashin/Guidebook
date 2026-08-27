@@ -86,13 +86,13 @@ function buildReadableEvidenceAnswer(message: string, pages: GuidePage[]) {
     .filter((term) => term.length >= 2 && !STOP_WORDS.has(term)))];
   const candidates = pages.slice(0, 3).flatMap((page) => {
     const lines = page.text.split(/\n+/)
-      .map((line) => line.replace(/\s+/g, ' ').trim())
-      .filter((line) => line.length >= 8)
+      .map((line) => line.replace(/^[\s\-※①-⑳□☞]+/, '').replace(/\s+/g, ' ').trim())
+      .filter((line) => line.length >= 12)
       .filter((line) => !/^\d+\s*\|/.test(line) && !/^Part\s+\d+/i.test(line));
     return lines.map((line, index) => {
       const matched = terms.filter((term) => normalize(line).includes(term));
       const context = [line];
-      for (let offset = 1; offset <= 2 && context.join(' ').length < 220; offset += 1) {
+      for (let offset = 1; offset <= 1 && context.join(' ').length < 170; offset += 1) {
         const next = lines[index + offset];
         if (!next || /^\d+\.\d+\s/.test(next)) break;
         context.push(next);
@@ -100,7 +100,7 @@ function buildReadableEvidenceAnswer(message: string, pages: GuidePage[]) {
       }
       return {
         page: page.page,
-        text: context.join(' ').slice(0, 260),
+        text: context.join(' ').replace(/^\d+[.)]\s*/, '').slice(0, 210),
         score: matched.reduce((score, term) => score + Math.min(term.length, 8), 0) + matched.length * 2,
       };
     });
@@ -112,10 +112,10 @@ function buildReadableEvidenceAnswer(message: string, pages: GuidePage[]) {
       if (!key || [...seen].some((saved) => saved.includes(key) || key.includes(saved))) return false;
       seen.add(key);
       return true;
-    }).slice(0, 5);
+    }).slice(0, 4);
   if (facts.length === 0) return NOT_FOUND_REPLY;
   const evidencePages = [...new Set(facts.map(({ page }) => page))];
-  return `질문에 답변드립니다.\n\n### 확인된 핵심 기준\n\n${facts.map(({ text }, index) => `${index + 1}. ${text}`).join('\n')}\n\n### 근거\n\n- 「2026 기상관측표준화 업무가이드」 ${evidencePages.map((page) => `p.${page}`).join(', ')}\n\n■ 한눈에 보기\n\n${facts.slice(0, 3).map(({ text }) => `- ${text}`).join('\n')}`;
+  return `질문에 답변드립니다.\n\n### 핵심 기준\n\n${facts.map(({ text }) => `- ${text}`).join('\n')}\n\n### 근거\n\n- 「2026 기상관측표준화 업무가이드」 ${evidencePages.map((page) => `p.${page}`).join(', ')}`;
 }
 
 function answerWithoutAi(message: string, pages: GuidePage[]) {
