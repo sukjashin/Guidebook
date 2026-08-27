@@ -10,22 +10,16 @@ import {
   Check, 
   RotateCcw, 
   HelpCircle, 
-  ArrowRight, 
   BookOpen, 
   FileText, 
   History, 
   Download, 
   PlusCircle, 
-  Compass, 
-  ShieldCheck, 
-  Sliders, 
   CheckCircle2, 
-  Layers,
   FileSpreadsheet,
   ChevronDown
 } from 'lucide-react';
 import { Message, ChatSession } from '../types';
-import { QUICK_PROMPTS } from '../data/standardGuideData';
 import { exportSession } from '../utils/historyExport';
 
 interface ChatInterfaceProps {
@@ -53,7 +47,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 }) => {
   const [input, setInput] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [activeCategory, setActiveCategory] = useState<string>('all');
   const [showMobileGuide, setShowMobileGuide] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -103,49 +96,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       exportSession(tempSession, 'md');
     }
   };
-
-  const CATEGORY_PROMPTS = [
-    {
-      id: 'env',
-      label: '관측환경 & 10H',
-      icon: Compass,
-      prompts: [
-        '풍향·풍속계를 옥상에 설치할 때 표준 높이 및 장애물 이격거리(10h) 기준은?',
-        '기상관측소 표준 노장 부지(35㎡ 잔디밭)와 지표면 설치 조건은?',
-        '관측지점 위치 이전(500m 또는 5m 초과) 시 승인 절차는?',
-      ],
-    },
-    {
-      id: 'sensor',
-      label: '센서 규격 & 설치',
-      icon: Sliders,
-      prompts: [
-        '온도·습도 센서 차광통 설치 높이(1.5m) 및 방열판 기준은?',
-        '전도형 강수량계(수구 20cm, 0.5mm/0.1mm) 분해능 및 설치 높이 규격은?',
-        '일사계·일조계 수평 유지 및 차폐각 허용 기준은?',
-      ],
-    },
-    {
-      id: 'calib',
-      label: '측기검정 & 유효기간',
-      icon: ShieldCheck,
-      prompts: [
-        '기상측기 10종 형식승인 및 검정 주기(유효기간 3년/5년) 정리해줘',
-        '검정 유효기간 만료 10일 전 신청 시 수수료 전액 면제 조건은?',
-        '검정 불합격 측기의 재검정 및 교체 규정은?',
-      ],
-    },
-    {
-      id: 'qc',
-      label: '자료연계 & 5대 QC',
-      icon: Layers,
-      prompts: [
-        '기상관측자료 유통 표준 파일 포맷(AWS 1분/10분)과 실제 데이터 레코드 예시 보여줘',
-        '기상청 5대 실시간 품질검사(물리한계, 단계, 지속성, 내적일치성, 기후) 판정식은?',
-        '광주광역시 1분 누적 일사량(W/㎡ → MJ/㎡) 기상청 전송 단위 변환 규정은?',
-      ],
-    },
-  ];
 
   return (
     <div className="flex flex-col h-[calc(100dvh-8.5rem)] md:h-[calc(100vh-4.5rem)] max-w-6xl mx-auto p-2 sm:p-4">
@@ -259,58 +209,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   관측환경, 센서 설치, 측기검정, 자료연계·품질관리 기준을 2026 업무가이드의 근거 조항과 함께 안내합니다.
                 </div>
               )}
-            </div>
-
-            {/* Category Filter Pills */}
-            <div className="flex overflow-x-auto sm:flex-wrap sm:items-center sm:justify-center gap-1.5 pt-1 sm:pt-2 pb-1 snap-x">
-              <button
-                onClick={() => setActiveCategory('all')}
-                className={`shrink-0 px-3 py-2 sm:py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  activeCategory === 'all'
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'bg-slate-800 text-slate-300 hover:bg-slate-750 hover:text-white border border-slate-700'
-                }`}
-              >
-                전체 질문 예시
-              </button>
-              {CATEGORY_PROMPTS.map((cat) => {
-                const Icon = cat.icon;
-                const isSelected = activeCategory === cat.id;
-                return (
-                  <button
-                    key={cat.id}
-                    onClick={() => setActiveCategory(cat.id)}
-                    className={`shrink-0 flex items-center space-x-1.5 px-3 py-2 sm:py-1.5 rounded-lg text-xs font-medium transition-all ${
-                      isSelected
-                        ? 'bg-blue-600 text-white shadow-xs'
-                        : 'bg-slate-800 text-slate-300 hover:bg-slate-750 hover:text-white border border-slate-700'
-                    }`}
-                  >
-                    <Icon className="w-3.5 h-3.5" />
-                    <span>{cat.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Quick Prompt Cards Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-              {(activeCategory === 'all'
-                ? QUICK_PROMPTS
-                : CATEGORY_PROMPTS.find((c) => c.id === activeCategory)?.prompts || QUICK_PROMPTS
-              ).slice(0, 6).map((prompt, i) => (
-                <button
-                  key={i}
-                  id={`clean-prompt-${i}`}
-                  onClick={() => onSelectPrompt(prompt)}
-                  className={`${i > 3 ? 'hidden sm:flex' : 'flex'} items-start justify-between text-left p-3 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700/70 hover:border-blue-500/50 transition-all group min-h-14`}
-                >
-                  <span className="text-xs text-slate-200 group-hover:text-blue-300 leading-snug">
-                    {prompt}
-                  </span>
-                  <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-400 shrink-0 ml-2 mt-0.5 transition-transform group-hover:translate-x-0.5" />
-                </button>
-              ))}
             </div>
 
             {/* History info banner */}
