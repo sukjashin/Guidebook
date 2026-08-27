@@ -12,7 +12,6 @@ import {
   HelpCircle, 
   BookOpen, 
   FileText, 
-  History, 
   Download, 
   PlusCircle, 
   CheckCircle2, 
@@ -28,8 +27,6 @@ interface ChatInterfaceProps {
   isLoading: boolean;
   onClearHistory: () => void;
   onSelectPrompt: (prompt: string) => void;
-  onOpenHistoryDrawer: () => void;
-  historyCount: number;
   currentSession?: ChatSession | null;
   onNewCleanSession: () => void;
 }
@@ -40,8 +37,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   isLoading,
   onClearHistory,
   onSelectPrompt,
-  onOpenHistoryDrawer,
-  historyCount,
   currentSession,
   onNewCleanSession,
 }) => {
@@ -113,24 +108,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </span>
         </div>
 
-        {/* Right Actions: History drawer, New clean session, Export */}
+        {/* Right Actions: New clean session, Export */}
         <div className="flex items-center space-x-1.5">
-          {/* History Drawer Trigger */}
-          <button
-            id="btn-open-history"
-            onClick={onOpenHistoryDrawer}
-            className="flex items-center space-x-1.5 text-xs font-medium text-slate-300 hover:text-white px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors"
-            title="질의 히스토리 보관함 열기"
-          >
-            <History className="w-3.5 h-3.5 text-blue-400" />
-            <span>히스토리</span>
-            {historyCount > 0 && (
-              <span className="ml-0.5 px-1.5 py-0.2 bg-blue-600 text-white rounded-full text-[10px] font-bold">
-                {historyCount}
-              </span>
-            )}
-          </button>
-
           {/* New Clean Question / Editor Button */}
           {!isCleanEditor && (
             <button
@@ -211,21 +190,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
               )}
             </div>
 
-            {/* History info banner */}
-            {historyCount > 0 && (
-              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-800/40 border border-slate-700/50 text-xs text-slate-400">
-                <div className="flex items-center space-x-2">
-                  <History className="w-4 h-4 text-blue-400" />
-                  <span>이전에 질문한 {historyCount}건의 내용이 **히스토리 보관함**에 안전하게 저장되어 있습니다.</span>
-                </div>
-                <button
-                  onClick={onOpenHistoryDrawer}
-                  className="text-blue-400 hover:text-blue-300 font-medium hover:underline shrink-0"
-                >
-                  히스토리 열기 →
-                </button>
-              </div>
-            )}
           </div>
         </div>
       ) : (
@@ -300,7 +264,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                         ),
                       }}
                     >
-                      {msg.content}
+                      {msg.content.replace(/~~/g, '~')}
                     </ReactMarkdown>
 
                     {/* Basis Document (근거 문서) tag if provided */}

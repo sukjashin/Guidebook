@@ -1,5 +1,5 @@
 import React from 'react';
-import { CloudSun, BookOpen, CheckSquare, MessageSquare, Cpu, FileText, History } from 'lucide-react';
+import { CloudSun, BookOpen, CheckSquare, MessageSquare, FileText, History } from 'lucide-react';
 
 interface HeaderProps {
   activeTab: 'chat' | 'handbook' | 'calculator' | 'specs';
@@ -45,7 +45,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Navigation Tabs */}
           <div className="order-3 md:order-none w-full md:w-auto flex items-center space-x-1 sm:space-x-2 overflow-x-auto">
-            <nav className="grid grid-cols-4 md:flex items-center gap-1 sm:gap-2 w-full md:w-auto">
+            <nav className="grid grid-cols-3 md:flex items-center gap-1 sm:gap-2 w-full md:w-auto">
               <button
                 id="tab-chat"
                 onClick={() => setActiveTab('chat')}
@@ -86,26 +86,13 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="md:hidden whitespace-nowrap">현장진단</span>
               </button>
 
-              <button
-                id="tab-specs"
-                onClick={() => setActiveTab('specs')}
-                className={`flex flex-col md:flex-row items-center justify-center gap-0.5 md:space-x-1.5 px-1 md:px-3 py-1.5 md:py-2 rounded-lg text-[10px] sm:text-xs md:text-sm font-medium transition-colors ${
-                  activeTab === 'specs'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
-                }`}
-              >
-                <Cpu className="w-4 h-4" />
-                <span className="hidden md:inline">센서 표준 규격표</span>
-                <span className="md:hidden whitespace-nowrap">센서규격</span>
-              </button>
             </nav>
 
             {/* History drawer button */}
             {onOpenHistory && (
               <button
                 onClick={onOpenHistory}
-                className="hidden md:flex items-center space-x-1.5 px-2.5 py-2 rounded-lg text-xs sm:text-sm font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors ml-1"
+                className="flex items-center space-x-1.5 px-2.5 py-2 rounded-lg text-xs sm:text-sm font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors ml-1"
                 title="질의 히스토리 파일 보관함 열기"
               >
                 <History className="w-4 h-4 text-blue-400" />

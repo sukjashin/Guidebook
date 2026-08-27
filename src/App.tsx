@@ -252,8 +252,6 @@ export default function App() {
             isLoading={isLoading}
             onClearHistory={handleClearHistory}
             onSelectPrompt={(prompt) => handleSendMessage(prompt)}
-            onOpenHistoryDrawer={() => setIsHistoryDrawerOpen(true)}
-            historyCount={sessions.length}
             currentSession={currentSession}
             onNewCleanSession={handleNewCleanSession}
           />
@@ -303,13 +301,6 @@ export default function App() {
             </span>
           </div>
           <div className="flex items-center space-x-3 text-slate-500 text-[11px]">
-            <button
-              onClick={() => setIsHistoryDrawerOpen(true)}
-              className="hover:text-blue-400 transition-colors"
-            >
-              질의 히스토리 ({sessions.length}건)
-            </button>
-            <span>•</span>
             <span>관측자료 연계 · 5대 QC · 측기검정 · 메타정보 등록</span>
           </div>
         </div>
