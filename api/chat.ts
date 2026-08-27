@@ -70,7 +70,8 @@ function findRelevantPages(message: string): GuidePage[] {
       const corpus = normalize(page.text);
       const matched = terms.filter((term) => corpus.includes(term));
       const score = matched.reduce((total, term) => total + Math.min(term.length, 8), 0)
-        + (matched.length === terms.length ? 12 : matched.length * 2);
+        + (matched.length === terms.length ? 12 : matched.length * 2)
+        - (page.page <= 10 ? 12 : 0);
       return { page, score };
     })
     .filter(({ score }) => score >= 6)
@@ -79,7 +80,7 @@ function findRelevantPages(message: string): GuidePage[] {
     .map(({ page }) => page);
 }
 
-function answerWithoutAi(message: string) {
+function answerWithoutAi(message: string, pages: GuidePage[]) {
   const query = normalize(message);
   if ((query.includes('풍향') || query.includes('풍속')) && (query.includes('설치') || query.includes('옥상'))) {
     return `질문에 답변드립니다.\n\n### 풍향·풍속계 옥상 설치기준\n\n- 표준 설치 높이는 지면에서 10m입니다.\n- 옥상 설치 시에는 지면 기준 건물 높이의 1.3배 이상 또는 옥상 바닥에서 건물 폭만큼의 높이에 설치합니다.\n- 주변 장애물 높이(h)의 10배 이상(10h) 이격하는 것이 원칙이며, 최소 2.5h 이상 확보해야 합니다.\n\n■ 핵심 요약\n1. 지면 기준 10m\n2. 옥상은 건물 높이 1.3배 또는 건물 폭 기준\n3. 장애물 10h 이격 원칙, 최소 2.5h`;
@@ -90,11 +91,23 @@ function answerWithoutAi(message: string) {
   if (query.includes('검정') && (query.includes('유효기간') || query.includes('수수료') || query.includes('면제'))) {
     return `질문에 답변드립니다.\n\n- 검정 유효기간 3년: 온도계, 기압계, 습도계, 풍향계, 풍속계, 강수량계\n- 검정 유효기간 5년: 일조계, 일사계, 증발계, 적설계\n- 검정 수수료는 유효기간 만료 10일 전까지 신청하면 전액 면제됩니다.\n\n■ 핵심 요약\n1. 주요 측기 유효기간은 3년입니다.\n2. 일조·일사·증발·적설계는 5년입니다.\n3. 만료 10일 전까지 신청해야 수수료가 면제됩니다.`;
   }
+  if (query.includes('검정불합격') || (query.includes('불합격') && query.includes('사후관리'))) {
+    return `질문에 답변드립니다.\n\n### 검정 불합격 기상측기 사후관리\n\n1. 검정 결과를 통보받는 즉시 해당 측기의 관측과 관측자료 사용·전송을 중단합니다.\n2. 불합격 통보 공문을 받은 날부터 30일 이내에 장비 수리 또는 교체와 재검정을 포함한 조치를 완료합니다.\n3. 천재지변이나 해외 수리·구매 등으로 30일 이내 조치가 어렵다면 기상청과 사전 협의하고, 기상청 및 한국기상산업기술원에 조치계획 공문을 제출합니다.\n4. 장비를 교체하면 관측메타데이터시스템에 새 장비 정보와 검정이력을 등록합니다.\n5. 장비를 수리하면 즉시 수시검정을 신청합니다. 검정기관은 신청·접수 후 14일 이내 재검정할 수 있도록 협조합니다.\n6. 재검정에 합격한 뒤에만 관측을 재개합니다.\n\n■ 핵심 요약\n1. 불합격 통보 즉시 관측·자료전송 중단\n2. 통보일부터 30일 이내 수리·교체 및 재검정 완료\n3. 수리 장비는 수시검정 신청 후 합격해야 관측 재개`;
+  }
   if (query.includes('품질') || query.includes('qc') || query.includes('물리한계') || query.includes('단계검사')) {
     return `질문에 답변드립니다.\n\n### 품질검사(QC) 5대 조건\n\n1. 물리한계검사: 기온 -40~60℃, 일누적강수량 0~1,800mm, 풍속 0~75m/s, 기압 500~1,080hPa, 상대습도 1~100%, 일누적일사 0~45MJ/㎡, 일누적일조 0~54,000초\n2. 단계검사(1분 최대변화량): 기온 3℃, 일누적강수량 20mm, 최대순간풍속 30m/s\n3. 지속성검사: 기온·기압은 180분간 변화량 0, 풍향·풍속은 240분간 변화량 0이면 오류\n4. 기후범위검사: 월별 기온 허용범위를 벗어나면 오류\n5. 내적일치성검사: 1분 최대순간풍속이 1분 풍속보다 작거나, 일사가 0인데 일조가 0보다 크면 오류\n\n### 품질등급 판정식\n\n정상자료율 = (정상자료 개수 ÷ 관측요소별 수집가능 개수) × 100\n\n- 우수: 80% 이상\n- 보통: 50% 이상 80% 미만\n- 개선대상: 50% 미만\n\n■ 핵심 요약\n1. 물리한계·단계·지속성·기후범위·내적일치성의 5단계로 검사합니다.\n2. 정상자료율을 기준으로 품질등급을 판정합니다.\n3. 근거는 업무가이드 Part 4(p.80~84)입니다.`;
   }
   if ((query.includes('500ml') || query.includes('생수병')) && query.includes('강수')) {
     return `질문에 답변드립니다.\n\n- 20cm 수수구 기준 500ml 생수병 1병은 강수량 15.9mm에 해당합니다.\n- 물을 약 10분 동안 일정하게 주입합니다.\n- 0.5mm 전도형 강수량계는 30~33회 전도되는지 확인합니다.\n\n■ 핵심 요약\n1. 500ml는 15.9mm입니다.\n2. 10분간 균일하게 주입합니다.\n3. 정상 전도 횟수는 30~33회입니다.`;
+  }
+  if (pages.length > 0) {
+    const bestPage = pages[0];
+    const excerpt = bestPage.text
+      .replace(/^\s*\d+\s*\|[^\n]*\n?/, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+      .slice(0, 1800);
+    return `질문에 답변드립니다.\n\n### 업무가이드 p.${bestPage.page}에서 확인한 관련 내용\n\n${excerpt}\n\n■ 확인 안내\n위 내용은 질문과 가장 관련성이 높은 업무가이드 원문 페이지에서 추출했습니다.`;
   }
   return NOT_FOUND_REPLY;
 }
@@ -207,8 +220,8 @@ async function answerQuestion(request: VercelRequest, response: VercelResponse) 
     if (!aiResponse) {
       answerMode = 'local-only-fallback';
       return response.status(200).json({
-        reply: answerWithoutAi(message),
-        sources: sourcePages.map(({ page }) => `「2026 기상관측표준화 업무가이드」 p.${page}`),
+        reply: answerWithoutAi(message, sourcePages),
+        sources: sourcePages.slice(0, 3).map(({ page }) => `「2026 기상관측표준화 업무가이드」 p.${page}`),
         answerMode,
         suggestedQuestions: [
           '풍향·풍속계의 표준 설치 높이는?',
