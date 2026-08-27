@@ -99,7 +99,10 @@ export default function App() {
       timestamp: Date.now(),
     };
 
-    const newMessages = [...messages, userMsg];
+    const newMessages = [
+      ...messages.filter((message) => message.id !== INITIAL_MESSAGE.id),
+      userMsg,
+    ];
     setMessages(newMessages);
     setIsLoading(true);
 

@@ -175,7 +175,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       ) : (
         /* ================= ACTIVE CHAT / Q&A VIEW ================= */
         <div className="flex-1 overflow-y-auto space-y-4 px-1 sm:px-2 pb-4">
-          {messages.map((msg) => (
+          {messages.filter((msg) => msg.id !== 'welcome-1').map((msg) => (
             <div
               key={msg.id}
               id={`message-${msg.id}`}

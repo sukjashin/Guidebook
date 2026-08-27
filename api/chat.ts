@@ -86,6 +86,51 @@ function getPreferredPages(message: string) {
   return [];
 }
 
+function getRelatedQuestions(message: string) {
+  const query = normalize(message);
+  if (query.includes('검정') || query.includes('수수료')) return [
+    '기상측기별 검정 유효기간은 어떻게 되나요?',
+    '검정 수수료 면제 신청 조건과 기한은 무엇인가요?',
+    '검정에 불합격한 기상측기의 사후관리 절차는 어떻게 되나요?',
+  ];
+  if (query.includes('풍향') || query.includes('풍속')) return [
+    '풍향·풍속계의 지상 및 옥상 표준 설치 높이는 얼마인가요?',
+    '풍향·풍속계와 주변 장애물의 최소 이격거리는 어떻게 계산하나요?',
+    '풍향·풍속계 설치 후 현장에서 확인할 점검항목은 무엇인가요?',
+  ];
+  if (query.includes('강수') || query.includes('우량')) return [
+    '강수량계 수수구의 표준 설치 높이는 얼마인가요?',
+    '강수량계와 주변 장애물의 이격 기준은 어떻게 계산하나요?',
+    '500ml 생수병으로 강수량계를 점검하는 방법은 무엇인가요?',
+  ];
+  if (query.includes('온도') || query.includes('습도') || query.includes('백엽상') || query.includes('차광통')) return [
+    '온·습도계와 주변 장애물의 이격 기준은 무엇인가요?',
+    '백엽상과 차광통의 표준 설치 높이는 각각 얼마인가요?',
+    '차광통의 통풍속도와 설치환경 점검 기준은 무엇인가요?',
+  ];
+  if (query.includes('신규') || query.includes('이전') || query.includes('교체') || query.includes('폐지')) return [
+    '신규 설치 전에 관측기관이 확인해야 할 절차는 무엇인가요?',
+    '관측시설 이전·교체 시 제출해야 하는 자료는 무엇인가요?',
+    '관측시설 폐지 시 관측기관의 조치사항은 무엇인가요?',
+  ];
+  if (query.includes('품질') || query.includes('qc') || query.includes('물리한계')) return [
+    '기상관측자료의 5대 품질검사 항목은 무엇인가요?',
+    '물리한계검사에서 측기별 허용범위는 어떻게 되나요?',
+    '품질검사 이상자료가 발생했을 때 조치 절차는 무엇인가요?',
+  ];
+  if (query.includes('중복') || query.includes('1km')) return [
+    '기상관측시설 중복설치 검토 대상과 제외 대상은 무엇인가요?',
+    '반경 1km 이내 중복시설이 있을 때 검토 절차는 어떻게 되나요?',
+    '강수량계 중복시설의 유지 우선순위는 어떻게 되나요?',
+  ];
+  const topic = message.trim().replace(/[?？]+$/, '').slice(0, 45);
+  return [
+    `${topic}의 적용 기준을 항목별로 설명해줘`,
+    `${topic}와 관련된 실무 절차를 알려줘`,
+    `${topic} 적용 시 예외와 주의사항을 알려줘`,
+  ];
+}
+
 function getGuideIndex(): GuideIndex {
   if (!guideIndex) {
     const indexPath = path.join(process.cwd(), 'public', 'data', 'guide-pages.json');
@@ -313,11 +358,7 @@ async function answerQuestion(request: VercelRequest, response: VercelResponse) 
           : sourcePages.slice(0, 3)
         ).map(({ page }) => `「2026 기상관측표준화 업무가이드」 p.${page}`),
         answerMode,
-        suggestedQuestions: [
-          '풍향·풍속계의 표준 설치 높이는?',
-          '검정 수수료 면제 신청 기한은?',
-          '500ml 생수병으로 강수량계를 점검하는 방법은?',
-        ],
+        suggestedQuestions: getRelatedQuestions(message),
       });
     }
 
@@ -328,11 +369,7 @@ async function answerQuestion(request: VercelRequest, response: VercelResponse) 
         : ['「2026 기상관측표준화 업무가이드」 원본 PDF 전체(156쪽)'],
       usage: calculateUsage(aiResponse.usageMetadata),
       answerMode,
-      suggestedQuestions: [
-        '풍향·풍속계의 표준 설치 높이는?',
-        '검정 수수료 면제 신청 기한은?',
-        '500ml 생수병으로 강수량계를 점검하는 방법은?',
-      ],
+      suggestedQuestions: getRelatedQuestions(message),
     });
   } catch (error) {
     console.error('Vercel native PDF chat error:', error);
