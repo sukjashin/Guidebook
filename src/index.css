@@ -19,7 +19,9 @@ body {
   font-weight: 500;
   letter-spacing: -0.018em;
   line-height: 1.75;
-  text-wrap: balance;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  text-wrap: pretty;
 }
 
 /* 밝고 신뢰감 있는 공공서비스용 라이트 테마 */

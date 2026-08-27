@@ -151,9 +151,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             
             {/* Minimalist Hero Badge & Title */}
             <div className="text-center space-y-2 px-1">
-              <h2 className="welcome-copy mx-auto max-w-3xl text-base text-slate-100 sm:text-xl">
-                안녕하세요, 기상관측표준화 업무를 쉽고 정확하게 안내하는 광주지방기상청 관측과 AI 챗봇 &apos;관측e비서&apos;입니다. 궁금한 내용을 편하게 물어보세요. 필요한 기준과 절차를 한눈에 이해할 수 있도록 정리해 드릴게요.
-              </h2>
+              <div className="welcome-copy mx-auto max-w-3xl text-left text-base text-slate-100 sm:text-lg">
+                <p>
+                  안녕하세요.<br />
+                  기상관측표준화 업무를 쉽고 정확하게 안내하는 <strong className="font-semibold">광주지방기상청 관측과 AI 챗봇 &apos;관측e비서&apos;</strong>입니다.
+                </p>
+                <p className="mt-4 text-slate-600">
+                  궁금한 내용을 편하게 물어보세요.<br />
+                  필요한 기준과 절차를 한눈에 이해할 수 있도록 정리해 드릴게요.
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowMobileGuide((open) => !open)}
