@@ -56,7 +56,7 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
               >
                 <MessageSquare className="w-4 h-4" />
-                <span className="whitespace-nowrap">AI 질문</span>
+                <span className="whitespace-nowrap">AI 챗봇</span>
               </button>
 
               <button

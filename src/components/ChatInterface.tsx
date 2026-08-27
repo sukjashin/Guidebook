@@ -40,6 +40,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   currentSession,
   onNewCleanSession,
 }) => {
+  const cleanMessageContent = (text: string) => text
+    .replace(/~~/g, '~')
+    .replace(/\n---\s*\n광주지방기상청 관측과\(062-720-0553\)\s*$/g, '');
   const [input, setInput] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showMobileGuide, setShowMobileGuide] = useState(false);
@@ -72,7 +75,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   };
 
   const copyToClipboard = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(`\`\`\`text\n${cleanMessageContent(text)}\n\`\`\``);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
@@ -224,7 +227,17 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
               >
                 {/* Message Content */}
                 {msg.role === 'user' ? (
-                  <p className="whitespace-pre-wrap font-medium">{msg.content}</p>
+                  <div>
+                    <p className="whitespace-pre-wrap font-medium">{msg.content}</p>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(msg.content, msg.id)}
+                      className="ml-auto mt-2 flex items-center gap-1 rounded px-2 py-1 text-xs text-blue-100/80 transition-colors hover:bg-blue-500 hover:text-white"
+                    >
+                      {copiedId === msg.id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                      <span>{copiedId === msg.id ? '복사 완료' : '질문 코드블록 복사'}</span>
+                    </button>
+                  </div>
                 ) : (
                   <div className="prose prose-invert prose-sm max-w-none space-y-2 text-slate-200">
                     <ReactMarkdown
@@ -262,14 +275,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                         blockquote: ({ node, ...props }) => (
                           <blockquote className="border-l-4 border-blue-500 pl-3 py-1 my-2 bg-slate-900/50 rounded-r text-slate-300 italic" {...props} />
                         ),
+                        hr: () => null,
                       }}
                     >
-                      {msg.content.replace(/~~/g, '~')}
+                      {cleanMessageContent(msg.content)}
                     </ReactMarkdown>
 
                     {/* Basis Document (근거 문서) tag if provided */}
                     {msg.sources && msg.sources.length > 0 && (
-                      <div className="mt-3 pt-2.5 border-t border-slate-700/60 flex flex-wrap items-center gap-1.5 text-xs text-slate-400">
+                      <div className="mt-3 pt-2.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-400">
                         <span className="font-semibold text-slate-300 flex items-center gap-1">
                           <FileText className="w-3 h-3 text-blue-400" />
                           근거 문서:
@@ -314,7 +328,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     )}
 
                     {/* Copy Button & Action row */}
-                    <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-700/40">
+                    <div className="flex items-center justify-between mt-3 pt-2">
                       <button
                         onClick={onNewCleanSession}
                         className="text-xs text-blue-400 hover:text-blue-300 flex items-center space-x-1 px-2 py-0.5 rounded hover:bg-slate-700/40 transition-colors font-medium"
@@ -335,7 +349,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                         ) : (
                           <>
                             <Copy className="w-3 h-3" />
-                            <span>답변 복사</span>
+                            <span>답변 코드블록 복사</span>
                           </>
                         )}
                       </button>
