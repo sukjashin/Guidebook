@@ -2,7 +2,6 @@ export const maxDuration = 60;
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { STANDARD_GUIDE_TOPICS } from '../src/data/standardGuideData';
 
 const DEFAULT_FILE_SEARCH_STORE = 'fileSearchStores/2026weatherobservationstand-8m5v3hoo957q';
 const NOT_FOUND_REPLY = '죄송합니다. 요청하신 내용에 대해서는 제공된 자료(파일) 내에서 확인되지 않습니다.';
@@ -91,18 +90,13 @@ function answerWithoutAi(message: string) {
   if (query.includes('검정') && (query.includes('유효기간') || query.includes('수수료') || query.includes('면제'))) {
     return `질문에 답변드립니다.\n\n- 검정 유효기간 3년: 온도계, 기압계, 습도계, 풍향계, 풍속계, 강수량계\n- 검정 유효기간 5년: 일조계, 일사계, 증발계, 적설계\n- 검정 수수료는 유효기간 만료 10일 전까지 신청하면 전액 면제됩니다.\n\n■ 핵심 요약\n1. 주요 측기 유효기간은 3년입니다.\n2. 일조·일사·증발·적설계는 5년입니다.\n3. 만료 10일 전까지 신청해야 수수료가 면제됩니다.`;
   }
-
-  const terms = message.toLowerCase().split(/[^0-9a-z가-힣]+/).map(normalize).filter((term) => term.length >= 2);
-  const topic = STANDARD_GUIDE_TOPICS
-    .map((item) => {
-      const corpus = normalize(`${item.title} ${item.summary} ${item.keyStandards.join(' ')} ${item.frequentlyAsked.join(' ')}`);
-      return {
-        item,
-        score: terms.reduce((score, term) => score + (corpus.includes(term) ? Math.min(term.length, 8) : 0), 0),
-      };
-    })
-    .sort((a, b) => b.score - a.score)[0];
-  return topic?.score >= 4 ? topic.item.details : NOT_FOUND_REPLY;
+  if (query.includes('품질') || query.includes('qc') || query.includes('물리한계') || query.includes('단계검사')) {
+    return `질문에 답변드립니다.\n\n### 품질검사(QC) 5대 조건\n\n1. 물리한계검사: 기온 -40~60℃, 일누적강수량 0~1,800mm, 풍속 0~75m/s, 기압 500~1,080hPa, 상대습도 1~100%, 일누적일사 0~45MJ/㎡, 일누적일조 0~54,000초\n2. 단계검사(1분 최대변화량): 기온 3℃, 일누적강수량 20mm, 최대순간풍속 30m/s\n3. 지속성검사: 기온·기압은 180분간 변화량 0, 풍향·풍속은 240분간 변화량 0이면 오류\n4. 기후범위검사: 월별 기온 허용범위를 벗어나면 오류\n5. 내적일치성검사: 1분 최대순간풍속이 1분 풍속보다 작거나, 일사가 0인데 일조가 0보다 크면 오류\n\n### 품질등급 판정식\n\n정상자료율 = (정상자료 개수 ÷ 관측요소별 수집가능 개수) × 100\n\n- 우수: 80% 이상\n- 보통: 50% 이상 80% 미만\n- 개선대상: 50% 미만\n\n■ 핵심 요약\n1. 물리한계·단계·지속성·기후범위·내적일치성의 5단계로 검사합니다.\n2. 정상자료율을 기준으로 품질등급을 판정합니다.\n3. 근거는 업무가이드 Part 4(p.80~84)입니다.`;
+  }
+  if ((query.includes('500ml') || query.includes('생수병')) && query.includes('강수')) {
+    return `질문에 답변드립니다.\n\n- 20cm 수수구 기준 500ml 생수병 1병은 강수량 15.9mm에 해당합니다.\n- 물을 약 10분 동안 일정하게 주입합니다.\n- 0.5mm 전도형 강수량계는 30~33회 전도되는지 확인합니다.\n\n■ 핵심 요약\n1. 500ml는 15.9mm입니다.\n2. 10분간 균일하게 주입합니다.\n3. 정상 전도 횟수는 30~33회입니다.`;
+  }
+  return NOT_FOUND_REPLY;
 }
 
 function isQuotaError(error: unknown) {
