@@ -1,6 +1,7 @@
 export const maxDuration = 60;
 
-import guideIndex from '../public/data/guide-pages.json';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 
 const DEFAULT_FILE_SEARCH_STORE = 'fileSearchStores/2026weatherobservationstand-8m5v3hoo957q';
 const NOT_FOUND_REPLY = '죄송합니다. 요청하신 내용에 대해서는 제공된 자료(파일) 내에서 확인되지 않습니다.';
@@ -44,9 +45,19 @@ interface VercelResponse {
   json(body: unknown): void;
 }
 interface GuidePage { page: number; text: string; }
+interface GuideIndex { pages: GuidePage[]; }
 
 const STOP_WORDS = new Set(['알려줘', '알려주세요', '무엇인가요', '어떻게', '기준은', '방법은', '대한', '관련', '질문']);
 const normalize = (text: string) => text.toLowerCase().replace(/[^0-9a-z가-힣]/g, '');
+let guideIndex: GuideIndex | undefined;
+
+function getGuideIndex(): GuideIndex {
+  if (!guideIndex) {
+    const indexPath = path.join(process.cwd(), 'public', 'data', 'guide-pages.json');
+    guideIndex = JSON.parse(readFileSync(indexPath, 'utf8')) as GuideIndex;
+  }
+  return guideIndex;
+}
 
 function findRelevantPages(message: string): GuidePage[] {
   const terms = [...new Set(message.toLowerCase().split(/[^0-9a-z가-힣]+/)
@@ -54,7 +65,7 @@ function findRelevantPages(message: string): GuidePage[] {
     .filter((term) => term.length >= 2 && !STOP_WORDS.has(term)))];
   if (terms.length === 0) return [];
 
-  return (guideIndex.pages as GuidePage[])
+  return getGuideIndex().pages
     .map((page) => {
       const corpus = normalize(page.text);
       const matched = terms.filter((term) => corpus.includes(term));
