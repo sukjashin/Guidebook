@@ -170,7 +170,7 @@ export const GuideExplorer: React.FC<GuideExplorerProps> = ({ onAskTopic }) => {
               {/* Detailed Markdown Content */}
               <div className="prose prose-invert prose-sm max-w-none text-slate-200 bg-slate-950/40 p-5 rounded-xl border border-slate-800/80">
                 <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
+                  remarkPlugins={[[remarkGfm, { singleTilde: false }]]}
                   components={{
                     del: ({ node, ...props }) => <span {...props} />,
                     table: ({ node, ...props }) => (

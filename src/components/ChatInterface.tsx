@@ -218,7 +218,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 ) : (
                   <div className="prose prose-invert prose-sm max-w-none space-y-2 text-slate-200">
                     <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
+                      remarkPlugins={[[remarkGfm, { singleTilde: false }]]}
                       components={{
                         table: ({ node, ...props }) => (
                           <div className="overflow-x-auto my-3 border border-slate-700 rounded-lg">
