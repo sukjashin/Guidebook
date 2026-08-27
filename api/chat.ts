@@ -2,6 +2,7 @@ export const maxDuration = 60;
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { STANDARD_GUIDE_TOPICS } from '../src/data/standardGuideData';
 
 const DEFAULT_FILE_SEARCH_STORE = 'fileSearchStores/2026weatherobservationstand-8m5v3hoo957q';
 const NOT_FOUND_REPLY = '죄송합니다. 요청하신 내용에 대해서는 제공된 자료(파일) 내에서 확인되지 않습니다.';
@@ -79,6 +80,33 @@ function findRelevantPages(message: string): GuidePage[] {
     .map(({ page }) => page);
 }
 
+function answerWithoutAi(message: string) {
+  const query = normalize(message);
+  if ((query.includes('풍향') || query.includes('풍속')) && (query.includes('설치') || query.includes('옥상'))) {
+    return `질문에 답변드립니다.\n\n### 풍향·풍속계 옥상 설치기준\n\n- 표준 설치 높이는 지면에서 10m입니다.\n- 옥상 설치 시에는 지면 기준 건물 높이의 1.3배 이상 또는 옥상 바닥에서 건물 폭만큼의 높이에 설치합니다.\n- 주변 장애물 높이(h)의 10배 이상(10h) 이격하는 것이 원칙이며, 최소 2.5h 이상 확보해야 합니다.\n\n■ 핵심 요약\n1. 지면 기준 10m\n2. 옥상은 건물 높이 1.3배 또는 건물 폭 기준\n3. 장애물 10h 이격 원칙, 최소 2.5h`;
+  }
+  if (query.includes('관리계획') && (query.includes('메일') || query.includes('공문') || query.includes('안내'))) {
+    return `질문에 답변드립니다.\n\n### 안내 메일 문안\n\n제목: 기상관측망 구축 및 관리계획 변경사항 제출 안내\n\n안녕하십니까. 광주지방기상청 관측과입니다.\n\n「2026 기상관측표준화 업무가이드」에 따라 기상관측시설의 신규 설치·이전·교체·폐지 등 변경사항을 반영한 기상관측망 구축 및 관리계획 변경계획을 제출하여 주시기 바랍니다.\n\n- 제출기한: 7월 31일까지\n- 제출내용: 관측시설 신규·이전·교체·폐지 등 변경사항과 향후 추진계획\n- 유의사항: 관측시설 간 최소이격거리, 설치환경 및 표준지점번호 부여 기준을 함께 확인\n\n기한 내 제출하여 주시기 바라며, 문의사항은 광주지방기상청 관측과(062-720-0553)로 연락해 주시기 바랍니다.\n\n감사합니다.\n\n■ 핵심 요약\n1. 변경계획 제출기한은 7월 31일입니다.\n2. 신규·이전·교체·폐지 사항을 반영합니다.\n3. 설치 및 지점 관리 기준을 함께 확인합니다.`;
+  }
+  if (query.includes('검정') && (query.includes('유효기간') || query.includes('수수료') || query.includes('면제'))) {
+    return `질문에 답변드립니다.\n\n- 검정 유효기간 3년: 온도계, 기압계, 습도계, 풍향계, 풍속계, 강수량계\n- 검정 유효기간 5년: 일조계, 일사계, 증발계, 적설계\n- 검정 수수료는 유효기간 만료 10일 전까지 신청하면 전액 면제됩니다.\n\n■ 핵심 요약\n1. 주요 측기 유효기간은 3년입니다.\n2. 일조·일사·증발·적설계는 5년입니다.\n3. 만료 10일 전까지 신청해야 수수료가 면제됩니다.`;
+  }
+
+  const terms = message.toLowerCase().split(/[^0-9a-z가-힣]+/).map(normalize).filter((term) => term.length >= 2);
+  const topic = STANDARD_GUIDE_TOPICS
+    .map((item) => ({
+      item,
+      score: terms.reduce((score, term) => score + (normalize(`${item.title} ${item.summary} ${item.keyStandards.join(' ')}`).includes(term) ? term.length : 0), 0),
+    }))
+    .sort((a, b) => b.score - a.score)[0];
+  return topic?.score > 0 ? topic.item.details : NOT_FOUND_REPLY;
+}
+
+function isQuotaError(error: unknown) {
+  const detail = error instanceof Error ? error.message : String(error);
+  return detail.includes('429') || detail.includes('RESOURCE_EXHAUSTED') || detail.toLowerCase().includes('quota');
+}
+
 function calculateUsage(usageMetadata: any) {
   const inputTokens = (usageMetadata?.promptTokenCount || 0) + (usageMetadata?.toolUsePromptTokenCount || 0);
   const answerTokens = usageMetadata?.candidatesTokenCount || 0;
@@ -148,6 +176,7 @@ async function answerQuestion(request: VercelRequest, response: VercelResponse) 
     let searchResponse: any;
     let aiResponse: any;
     let sourcePages: GuidePage[] = [];
+    let quotaExceeded = false;
     let answerMode = 'file-search';
     try {
       searchResponse = await searchGuide(ai, message);
@@ -159,20 +188,37 @@ async function answerQuestion(request: VercelRequest, response: VercelResponse) 
         aiResponse = searchResponse;
       }
     } catch (error) {
+      quotaExceeded = isQuotaError(error);
       console.warn('Gemini File Search 실패, 원본 PDF 전체 확인으로 전환합니다.', error);
     }
     if (!aiResponse) {
       answerMode = 'local-index-fallback';
       sourcePages = findRelevantPages(message);
-      const localResponse = await answerFromLocalIndex(ai, message, sourcePages);
-      if (localResponse) {
-        localResponse.usageMetadata = mergeUsageMetadata(searchResponse?.usageMetadata, localResponse.usageMetadata);
-        aiResponse = localResponse;
+      if (!quotaExceeded) {
+        try {
+          const localResponse = await answerFromLocalIndex(ai, message, sourcePages);
+          if (localResponse) {
+            localResponse.usageMetadata = mergeUsageMetadata(searchResponse?.usageMetadata, localResponse.usageMetadata);
+            aiResponse = localResponse;
+          }
+        } catch (error) {
+          console.warn('Gemini 로컬 색인 답변 실패, 서버 내장 답변으로 전환합니다.', error);
+        }
       }
     }
 
     if (!aiResponse) {
-      return response.status(200).json({ reply: NOT_FOUND_REPLY, sources: [], answerMode });
+      answerMode = 'local-only-fallback';
+      return response.status(200).json({
+        reply: answerWithoutAi(message),
+        sources: sourcePages.map(({ page }) => `「2026 기상관측표준화 업무가이드」 p.${page}`),
+        answerMode,
+        suggestedQuestions: [
+          '풍향·풍속계의 표준 설치 높이는?',
+          '검정 수수료 면제 신청 기한은?',
+          '500ml 생수병으로 강수량계를 점검하는 방법은?',
+        ],
+      });
     }
 
     return response.status(200).json({
