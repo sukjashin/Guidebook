@@ -23,7 +23,7 @@ const SYSTEM_INSTRUCTION = `# 역할
 # 답변 방식
 - 전문적이고 정중한 경어를 사용합니다.
 - 질문에 필요한 결론과 수치만 모바일에서 읽기 쉽게 간결하게 작성합니다.
-- 일반적인 기준·절차 답변은 핵심 요약을 포함하여 한글 기준 800자 이내로 작성합니다.
+- 일반적인 기준·절차 답변은 결론, 적용 기준, 실무 절차, 예외·주의사항을 포함하여 한글 기준 1,400자 이내로 작성합니다.
 - 이메일·공문·안내문 작성 요청은 필요한 문안을 완결하되 한글 기준 1,800자 이내로 작성합니다.
 - 사용자가 자세한 설명을 명시적으로 요청한 경우에만 위 분량보다 길게 작성합니다.
 - 여러 질문이 포함되면 각 항목을 짧게 구분하고 중요한 내용부터 답변합니다.
@@ -70,6 +70,7 @@ function longestPhraseMatch(query: string, corpus: string) {
 
 function getPreferredPages(message: string) {
   const query = normalize(message);
+  if (query.includes('중복') && (query.includes('기상관측시설') || query.includes('aws') || query.includes('강수량계'))) return [41];
   if (query.includes('신규') && (query.includes('조치') || query.includes('절차'))) return [33];
   if (query.includes('폐지') && (query.includes('조치') || query.includes('절차'))) return [33];
   if (query.includes('이전') && (query.includes('조치') || query.includes('절차'))) return [34];
@@ -159,7 +160,7 @@ function buildReadableEvidenceAnswer(message: string, pages: GuidePage[]) {
       if (!key || [...seen].some((saved) => saved.includes(key) || key.includes(saved))) return false;
       seen.add(key);
       return true;
-    }).slice(0, 4);
+    }).slice(0, 6);
   if (facts.length === 0) return NOT_FOUND_REPLY;
   const evidencePages = [...new Set(facts.map(({ page }) => page))];
   return `질문에 답변드립니다.\n\n### 핵심 기준\n\n${facts.map(({ text }) => `- ${text}`).join('\n')}\n\n### 근거\n\n- 「2026 기상관측표준화 업무가이드」 ${evidencePages.map((page) => `p.${page}`).join(', ')}`;
@@ -167,6 +168,9 @@ function buildReadableEvidenceAnswer(message: string, pages: GuidePage[]) {
 
 function answerWithoutAi(message: string, pages: GuidePage[]) {
   const query = normalize(message);
+  if (query.includes('중복') && (query.includes('기상관측시설') || query.includes('aws') || query.includes('강수량계'))) {
+    return `질문에 답변드립니다.\n\n### 결론\n\n기상재해 감시 목적의 자동기상관측장비(AWS)와 강수량계는 **설치 예정지를 기준으로 반경 1km 이내 중복설치를 제한**하는 것이 원칙입니다. 다만 관측 목적과 지역 특성에 따라 제외 또는 예외 유지 심사를 받을 수 있습니다.\n\n### 적용 기준\n\n- **AWS:** 기상기후·방재기상 등 기상재해 감시 목적 장비는 1km 이내 설치가 금지됩니다.\n- **강수량계:** AWS와 동일하게 1km 기준을 적용하되, 관측기관이 요청하면 예외 허용 여부를 심사합니다.\n- **제외 대상:** 농업·산악·교통·수문·환경·응용 등 특수목적 기상관측 6개 분야는 AWS 중복검토 대상에서 제외됩니다. 우량경보, 교통안전, 산사태·산불감시 장비 등이 예시입니다.\n\n### 신규·이전 설치 전 확인 절차\n\n1. 관측메타데이터시스템(OMDS)에 접속합니다.\n2. **통계/모니터링 → 관측중복 확인** 메뉴로 이동합니다.\n3. 설치 예정지의 위도·경도와 반경 1km를 입력해 주변 관측장비를 확인합니다.\n4. 중복 가능성이 있으면 설치 전에 중복설치 검토 요청 공문을 제출해 검토받습니다.\n\n### 강수량계가 중복될 때 유지 우선순위\n\n1. 관련 법령의 명시적 규정에 따라 설치한 시설\n2. AWS에 포함된 강수량계\n3. 관측소 시설등급이 높은 시설\n4. 인증제도를 준수한 시설\n5. 관측기간이 오래된 시설\n\n### 예외 유지 절차\n\n지역 특성, 고도차 또는 고유 설치목적 때문에 유지가 필요하면 **기상청 조치요구 → 관측기관의 유지 사유 제출 → 기상청 현장실사·협의조정 → 기상관측표준화위원회 심의** 순서로 결정합니다.\n\n### 근거\n\n- 「2026 기상관측표준화 업무가이드」 p.41`;
+  }
   if (query.includes('신규') && query.includes('관측기관') && (query.includes('조치') || query.includes('절차'))) {
     return `질문에 답변드립니다.\n\n### 신규설치 시 관측기관 조치사항\n\n1. 「기상관측망 구축 및 관리계획」에 신규설치 계획이 반영됐는지 확인합니다.\n2. 설치 예정 위치의 관측시설 중복 여부를 검토합니다. 동일 측기의 1km 이내 중복설치는 원칙적으로 제한됩니다.\n3. 관측환경 적합 여부를 검토하고, 필요하면 기상관측표준화 기술지원반에 사전 검토를 요청합니다.\n4. 형식승인과 검정을 받은 기상측기를 도입하고 측기별 설치기준에 따라 설치합니다.\n5. 관측자료의 기상정보시스템 실시간 전송 체계를 구축합니다.\n6. 설치 완료 후 표준지점번호 신청서를 공문으로 제출합니다.\n7. 기상청 안내에 따라 관측메타데이터시스템에 검정증명서와 동일한 센서정보를 등록합니다.\n\n### 근거\n\n- 「2026 기상관측표준화 업무가이드」 p.33`;
   }
