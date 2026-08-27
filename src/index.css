@@ -1,3 +1,4 @@
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css");
 @import "tailwindcss";
 
 :root {
@@ -11,6 +12,14 @@ body {
     radial-gradient(circle at 12% 0%, rgba(56, 189, 248, 0.16), transparent 34rem),
     linear-gradient(145deg, #f8fbff 0%, #eef6ff 52%, #f7fbff 100%);
   color: #0f172a;
+}
+
+.welcome-copy {
+  font-family: "Pretendard Variable", Pretendard, "Noto Sans KR", sans-serif;
+  font-weight: 500;
+  letter-spacing: -0.018em;
+  line-height: 1.75;
+  text-wrap: balance;
 }
 
 /* 밝고 신뢰감 있는 공공서비스용 라이트 테마 */
