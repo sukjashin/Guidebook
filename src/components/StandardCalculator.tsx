@@ -42,7 +42,7 @@ interface SpecEntry {
 }
 
 const STORAGE_KEY = "kma_site_diagnosis_draft_v2";
-const STEPS = ["측기 선택", "현장환경", "장애물", "입력 확인", "결과"];
+const STEPS = ["측기 선택", "필수값 입력", "장애물 확인", "진단 결과"];
 const instrumentIcons: Record<InstrumentType, React.ReactNode> = {
   tempHumidity: <CloudSun className="h-6 w-6" />,
   rain: <Gauge className="h-6 w-6" />,
@@ -545,22 +545,26 @@ export const StandardCalculator: React.FC<StandardCalculatorProps> = () => {
     if (step === 1)
       return (
         <div className="space-y-4">
-          <div className={cardClass}>
-            <SectionTitle description="개인정보성 입력값은 서버로 전송하지 않고 이 브라우저에만 임시 저장합니다.">
-              공통 현장정보
-            </SectionTitle>
+          <details className={cardClass}>
+            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 font-bold text-slate-900">
+              <span>
+                기록용 정보 <span className="ml-1 text-sm font-normal text-slate-500">(선택)</span>
+              </span>
+              <ChevronDown className="h-5 w-5 text-slate-500" />
+            </summary>
+            <p className="mb-4 mt-2 text-sm leading-relaxed text-slate-500">
+              기관명·점검자 등은 결과 판정에 사용되지 않습니다. 보고서에 기록할 때만 입력하세요.
+            </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field
                 label="기관명"
                 value={form.organization}
                 onChange={(v) => updateForm("organization", v)}
-                required
               />
               <Field
                 label="관측시설명"
                 value={form.stationName}
                 onChange={(v) => updateForm("stationName", v)}
-                required
               />
               <Field
                 label="지점번호"
@@ -571,14 +575,12 @@ export const StandardCalculator: React.FC<StandardCalculatorProps> = () => {
                 label="점검자"
                 value={form.inspector}
                 onChange={(v) => updateForm("inspector", v)}
-                required
               />
               <Field
                 label="점검일"
                 value={form.inspectionDate}
                 onChange={(v) => updateForm("inspectionDate", v)}
                 type="date"
-                required
               />
               <label className="space-y-1.5 text-sm font-semibold text-slate-700">
                 설치 장소
@@ -618,16 +620,15 @@ export const StandardCalculator: React.FC<StandardCalculatorProps> = () => {
                   label="특수환경 사유"
                   value={form.specialReason}
                   onChange={(v) => updateForm("specialReason", v)}
-                  required
                 />
               )}
             </div>
-          </div>
+          </details>
           <div className={cardClass}>
             <SectionTitle
-              description={`${INSTRUMENT_LABELS[instrument]} 등급에 필요한 항목입니다.`}
+              description={`별표(*)가 있는 ${INSTRUMENT_LABELS[instrument]} 판정값만 입력하면 됩니다.`}
             >
-              측기별 현장환경
+              진단에 필요한 값
             </SectionTitle>
             {renderInstrumentFields()}
           </div>
@@ -637,17 +638,31 @@ export const StandardCalculator: React.FC<StandardCalculatorProps> = () => {
       return (
         <div className="space-y-4">
           <div className={cardClass}>
-            <SectionTitle description="장애물 종류는 자유롭게 작성하고, 여러 개이면 모두 등록하세요. 가장 불리한 조건이 최종 판정에 적용됩니다.">
-              장애물 입력
+            <SectionTitle description="먼저 주변 장애물 유무만 선택하세요. 장애물이 있을 때만 측정칸이 나타납니다.">
+              주변에 영향을 줄 건물·나무·구조물이 있나요?
             </SectionTitle>
-            <Toggle
-              checked={noObstacles}
-              onChange={(checked) => {
-                setNoObstacles(checked);
-                if (checked) setObstacles([]);
-              }}
-              label="주변 장애물 없음"
-            />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setNoObstacles(false);
+                  if (obstacles.length === 0) setObstacles([createEmptyObstacle()]);
+                }}
+                className={`min-h-14 rounded-xl border-2 px-4 font-bold ${!noObstacles && obstacles.length > 0 ? "border-blue-600 bg-blue-50 text-blue-800" : "border-slate-200 bg-white text-slate-700"}`}
+              >
+                예, 장애물이 있어요
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setNoObstacles(true);
+                  setObstacles([]);
+                }}
+                className={`min-h-14 rounded-xl border-2 px-4 font-bold ${noObstacles ? "border-blue-600 bg-blue-50 text-blue-800" : "border-slate-200 bg-white text-slate-700"}`}
+              >
+                아니요, 없어요
+              </button>
+            </div>
             {!noObstacles && (
               <button
                 onClick={addObstacle}
@@ -794,7 +809,7 @@ export const StandardCalculator: React.FC<StandardCalculatorProps> = () => {
             ))}
         </div>
       );
-    if (step === 3)
+    if (step === 30)
       return (
         <div className="space-y-4">
           <div className={cardClass}>
@@ -1312,12 +1327,12 @@ export const StandardCalculator: React.FC<StandardCalculatorProps> = () => {
             <ArrowLeft className="h-5 w-5" />
             이전
           </button>
-          {step < 4 ? (
+          {step < 3 ? (
             <button
-              onClick={() => setStep((current) => Math.min(4, current + 1))}
+              onClick={() => setStep((current) => Math.min(3, current + 1))}
               className="flex min-h-12 flex-[2] items-center justify-center gap-2 rounded-xl bg-blue-600 font-bold text-white shadow-lg shadow-blue-200"
             >
-              {step === 3 ? "진단하기" : "다음"}
+              {step === 2 ? "진단 결과 보기" : "다음"}
               <ArrowRight className="h-5 w-5" />
             </button>
           ) : (
