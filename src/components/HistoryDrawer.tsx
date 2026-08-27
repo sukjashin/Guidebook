@@ -21,6 +21,7 @@ interface HistoryDrawerProps {
   currentSessionId?: string | null;
   onSelectSession: (session: ChatSession) => void;
   onDeleteSession: (sessionId: string) => void;
+  onDeleteSessions: (sessionIds: string[]) => void;
   onClearAllSessions: () => void;
   onNewSession: () => void;
 }
@@ -32,6 +33,7 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
   currentSessionId,
   onSelectSession,
   onDeleteSession,
+  onDeleteSessions,
   onClearAllSessions,
   onNewSession,
 }) => {
@@ -39,6 +41,8 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
   const [exportFormat, setExportFormat] = useState<'md' | 'txt' | 'json'>('md');
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [showClearAllModal, setShowClearAllModal] = useState<boolean>(false);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState<boolean>(false);
+  const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
   const [deletedToast, setDeletedToast] = useState<string | null>(null);
 
   if (!isOpen) return null;
@@ -54,6 +58,11 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
   const handleConfirmDelete = (sessionId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     onDeleteSession(sessionId);
+    setSelectedSessionIds((selected) => {
+      const next = new Set(selected);
+      next.delete(sessionId);
+      return next;
+    });
     setDeletingSessionId(null);
     setDeletedToast('해당 질의 히스토리가 삭제되었습니다.');
     setTimeout(() => setDeletedToast(null), 2500);
@@ -61,8 +70,39 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
 
   const handleConfirmClearAll = () => {
     onClearAllSessions();
+    setSelectedSessionIds(new Set());
     setShowClearAllModal(false);
     setDeletedToast('전체 질의 히스토리가 삭제되었습니다.');
+    setTimeout(() => setDeletedToast(null), 2500);
+  };
+
+  const toggleSessionSelection = (sessionId: string) => {
+    setSelectedSessionIds((selected) => {
+      const next = new Set(selected);
+      if (next.has(sessionId)) next.delete(sessionId);
+      else next.add(sessionId);
+      return next;
+    });
+  };
+
+  const allFilteredSelected = filteredSessions.length > 0
+    && filteredSessions.every((session) => selectedSessionIds.has(session.id));
+
+  const toggleSelectAll = () => {
+    setSelectedSessionIds((selected) => {
+      const next = new Set(selected);
+      if (allFilteredSelected) filteredSessions.forEach((session) => next.delete(session.id));
+      else filteredSessions.forEach((session) => next.add(session.id));
+      return next;
+    });
+  };
+
+  const handleConfirmBulkDelete = () => {
+    const ids = [...selectedSessionIds];
+    onDeleteSessions(ids);
+    setSelectedSessionIds(new Set());
+    setShowBulkDeleteModal(false);
+    setDeletedToast(`선택한 ${ids.length}개의 질의 히스토리가 삭제되었습니다.`);
     setTimeout(() => setDeletedToast(null), 2500);
   };
 
@@ -121,6 +161,29 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
                     className="flex-1 py-2 px-3 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold transition-colors shadow-sm"
                   >
                     전체 삭제
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showBulkDeleteModal && (
+            <div className="absolute inset-0 bg-slate-950/90 z-30 flex items-center justify-center p-4 backdrop-blur-xs">
+              <div className="bg-slate-900 border border-red-500/40 rounded-xl p-5 max-w-sm w-full shadow-2xl text-center space-y-3">
+                <div className="w-10 h-10 bg-red-500/20 text-red-400 rounded-full flex items-center justify-center mx-auto border border-red-500/30">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-100">선택한 기록 삭제</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  선택한 <strong className="text-red-300 font-semibold">{selectedSessionIds.size}개의 질의 기록</strong>을 삭제하시겠습니까?<br />
+                  이 작업은 되돌릴 수 없습니다.
+                </p>
+                <div className="flex items-center justify-center space-x-2 pt-2">
+                  <button onClick={() => setShowBulkDeleteModal(false)} className="flex-1 py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium transition-colors">
+                    취소
+                  </button>
+                  <button onClick={handleConfirmBulkDelete} className="flex-1 py-2 px-3 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold transition-colors shadow-sm">
+                    {selectedSessionIds.size}개 삭제
                   </button>
                 </div>
               </div>
@@ -204,6 +267,29 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
                 </button>
               )}
             </div>
+
+            {sessions.length > 0 && (
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 py-2">
+                <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={allFilteredSelected}
+                    onChange={toggleSelectAll}
+                    className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-blue-600 accent-blue-600"
+                  />
+                  <span>{allFilteredSelected ? '검색 결과 전체 선택 해제' : '검색 결과 전체 선택'}</span>
+                </label>
+                <button
+                  type="button"
+                  disabled={selectedSessionIds.size === 0}
+                  onClick={() => setShowBulkDeleteModal(true)}
+                  className="flex items-center gap-1 rounded-md bg-red-600 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-red-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-500"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  선택 삭제 ({selectedSessionIds.size})
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Session List */}
@@ -221,6 +307,7 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
             ) : (
               filteredSessions.map((session) => {
                 const isSelected = currentSessionId === session.id;
+                const isChecked = selectedSessionIds.has(session.id);
                 const isDeleting = deletingSessionId === session.id;
                 const firstUserMsg = session.messages.find((m) => m.role === 'user')?.content || session.title;
                 const firstAiMsg = session.messages.find((m) => m.role === 'assistant')?.content;
@@ -242,6 +329,16 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
                         : 'bg-slate-800/60 border-slate-700/60 hover:bg-slate-800 hover:border-slate-600'
                     }`}
                   >
+                    {!isDeleting && (
+                      <label className="absolute left-3 top-3 z-10 flex cursor-pointer items-center" title="삭제할 기록 선택">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleSessionSelection(session.id)}
+                          className="h-4 w-4 rounded-full border-slate-500 bg-slate-900 text-blue-600 accent-blue-600"
+                        />
+                      </label>
+                    )}
                     {/* Inline Delete Confirmation Bar */}
                     {isDeleting ? (
                       <div className="p-1 space-y-2" onClick={(e) => e.stopPropagation()}>
@@ -272,7 +369,7 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
                     ) : (
                       <>
                         {/* Header info */}
-                        <div className="flex items-start justify-between gap-2 mb-1.5">
+                        <div className="flex items-start justify-between gap-2 mb-1.5 pl-6">
                           <button
                             onClick={() => {
                               onSelectSession(session);

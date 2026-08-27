@@ -218,6 +218,12 @@ export default function App() {
     }
   };
 
+  const handleDeleteSessions = (sessionIds: string[]) => {
+    const deletingIds = new Set(sessionIds);
+    setSessions((prev) => prev.filter((session) => !deletingIds.has(session.id)));
+    if (currentSessionId && deletingIds.has(currentSessionId)) handleNewCleanSession();
+  };
+
   const handleClearAllSessions = () => {
     setSessions([]);
     localStorage.removeItem("kma_std_chat_sessions");
@@ -276,6 +282,7 @@ export default function App() {
         currentSessionId={currentSessionId}
         onSelectSession={handleSelectSession}
         onDeleteSession={handleDeleteSession}
+        onDeleteSessions={handleDeleteSessions}
         onClearAllSessions={handleClearAllSessions}
         onNewSession={handleNewCleanSession}
       />
