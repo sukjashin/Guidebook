@@ -51,6 +51,39 @@ const STOP_WORDS = new Set(['알려줘', '알려주세요', '무엇인가요', '
 const normalize = (text: string) => text.toLowerCase().replace(/[^0-9a-z가-힣]/g, '');
 let guideIndex: GuideIndex | undefined;
 
+function getSearchTerms(message: string) {
+  return [...new Set(message.toLowerCase().split(/[^0-9a-z가-힣]+/)
+    .map(normalize)
+    .map((term) => term.replace(/(에|에서|에게|으로|로|은|는|이|가|을|를|의|와|과|도|만|부터|까지|대해|알려줘|알려주세요)$/g, ''))
+    .filter((term) => term.length >= 2 && !STOP_WORDS.has(term)))];
+}
+
+function longestPhraseMatch(query: string, corpus: string) {
+  const maxLength = Math.min(28, query.length);
+  for (let length = maxLength; length >= 4; length -= 1) {
+    for (let start = 0; start <= query.length - length; start += 1) {
+      if (corpus.includes(query.slice(start, start + length))) return length;
+    }
+  }
+  return 0;
+}
+
+function getPreferredPages(message: string) {
+  const query = normalize(message);
+  if (query.includes('신규') && (query.includes('조치') || query.includes('절차'))) return [33];
+  if (query.includes('폐지') && (query.includes('조치') || query.includes('절차'))) return [33];
+  if (query.includes('이전') && (query.includes('조치') || query.includes('절차'))) return [34];
+  if (query.includes('교체') && (query.includes('조치') || query.includes('절차'))) return [34];
+  if (query.includes('구축') && query.includes('관리계획')) return [32];
+  if (query.includes('검정') && query.includes('불합격')) return [74];
+  if (query.includes('검정') && query.includes('신청방법')) return [64];
+  if (query.includes('검정') && query.includes('수수료')) return [69];
+  if (query.includes('품질') && (query.includes('물리한계') || query.includes('5대') || query.includes('qc'))) return [80];
+  if ((query.includes('풍향') || query.includes('풍속')) && query.includes('설치')) return [30];
+  if ((query.includes('500ml') || query.includes('생수병')) && query.includes('강수')) return [111, 110];
+  return [];
+}
+
 function getGuideIndex(): GuideIndex {
   if (!guideIndex) {
     const indexPath = path.join(process.cwd(), 'public', 'data', 'guide-pages.json');
@@ -59,31 +92,45 @@ function getGuideIndex(): GuideIndex {
   return guideIndex;
 }
 
-function findRelevantPages(message: string): GuidePage[] {
-  const terms = [...new Set(message.toLowerCase().split(/[^0-9a-z가-힣]+/)
-    .map(normalize)
-    .filter((term) => term.length >= 2 && !STOP_WORDS.has(term)))];
+export function findRelevantPages(message: string): GuidePage[] {
+  const terms = getSearchTerms(message);
   if (terms.length === 0) return [];
+  const query = normalize(message);
+  const requestedPage = message.match(/(?:^|\s)(\d{1,3})\s*(?:쪽|페이지|p\.?)(?:\s|$)/i)?.[1];
+  const preferredPages = getPreferredPages(message);
+  const indexedPages = getGuideIndex().pages.map((page) => ({ page, corpus: normalize(page.text) }));
+  const documentFrequencies = new Map(terms.map((term) => [
+    term,
+    indexedPages.reduce((count, item) => count + (item.corpus.includes(term) ? 1 : 0), 0),
+  ]));
 
-  return getGuideIndex().pages
-    .map((page) => {
-      const corpus = normalize(page.text);
+  return indexedPages
+    .map(({ page, corpus }) => {
+      const heading = normalize(page.text.split(/\n/).slice(0, 12).join(' '));
       const matched = terms.filter((term) => corpus.includes(term));
-      const score = matched.reduce((total, term) => total + Math.min(term.length, 8), 0)
+      const termScore = matched.reduce((total, term) => {
+        const rarity = Math.log2(157 / Math.max(1, documentFrequencies.get(term) || 1));
+        return total + Math.min(term.length, 10) * Math.max(1, rarity);
+      }, 0);
+      const phraseLength = longestPhraseMatch(query, corpus);
+      const headingPhraseLength = longestPhraseMatch(query, heading);
+      const score = termScore
         + (matched.length === terms.length ? 12 : matched.length * 2)
-        - (page.page <= 10 ? 12 : 0);
+        + phraseLength * phraseLength
+        + headingPhraseLength * headingPhraseLength * 2
+        + (preferredPages.includes(page.page) ? 5_000 : 0)
+        + (requestedPage === String(page.page) ? 10_000 : 0)
+        - (page.page <= 10 && requestedPage !== String(page.page) ? 30 : 0);
       return { page, score };
     })
-    .filter(({ score }) => score >= 6)
+    .filter(({ page, score }) => score >= 10 && (page.page > 10 || requestedPage === String(page.page)))
     .sort((a, b) => b.score - a.score)
     .slice(0, 6)
     .map(({ page }) => page);
 }
 
 function buildReadableEvidenceAnswer(message: string, pages: GuidePage[]) {
-  const terms = [...new Set(message.toLowerCase().split(/[^0-9a-z가-힣]+/)
-    .map(normalize)
-    .filter((term) => term.length >= 2 && !STOP_WORDS.has(term)))];
+  const terms = getSearchTerms(message);
   const candidates = pages.slice(0, 3).flatMap((page) => {
     const lines = page.text.split(/\n+/)
       .map((line) => line.replace(/^[\s\-※①-⑳□☞]+/, '').replace(/\s+/g, ' ').trim())
@@ -120,6 +167,9 @@ function buildReadableEvidenceAnswer(message: string, pages: GuidePage[]) {
 
 function answerWithoutAi(message: string, pages: GuidePage[]) {
   const query = normalize(message);
+  if (query.includes('신규') && query.includes('관측기관') && (query.includes('조치') || query.includes('절차'))) {
+    return `질문에 답변드립니다.\n\n### 신규설치 시 관측기관 조치사항\n\n1. 「기상관측망 구축 및 관리계획」에 신규설치 계획이 반영됐는지 확인합니다.\n2. 설치 예정 위치의 관측시설 중복 여부를 검토합니다. 동일 측기의 1km 이내 중복설치는 원칙적으로 제한됩니다.\n3. 관측환경 적합 여부를 검토하고, 필요하면 기상관측표준화 기술지원반에 사전 검토를 요청합니다.\n4. 형식승인과 검정을 받은 기상측기를 도입하고 측기별 설치기준에 따라 설치합니다.\n5. 관측자료의 기상정보시스템 실시간 전송 체계를 구축합니다.\n6. 설치 완료 후 표준지점번호 신청서를 공문으로 제출합니다.\n7. 기상청 안내에 따라 관측메타데이터시스템에 검정증명서와 동일한 센서정보를 등록합니다.\n\n### 근거\n\n- 「2026 기상관측표준화 업무가이드」 p.33`;
+  }
   if ((query.includes('풍향') || query.includes('풍속')) && (query.includes('설치') || query.includes('옥상'))) {
     return `질문에 답변드립니다.\n\n### 풍향·풍속계 옥상 설치기준\n\n- 표준 설치 높이는 지면에서 10m입니다.\n- 옥상 설치 시에는 지면 기준 건물 높이의 1.3배 이상 또는 옥상 바닥에서 건물 폭만큼의 높이에 설치합니다.\n- 주변 장애물 높이(h)의 10배 이상(10h) 이격하는 것이 원칙이며, 최소 2.5h 이상 확보해야 합니다.\n\n■ 핵심 요약\n1. 지면 기준 10m\n2. 옥상은 건물 높이 1.3배 또는 건물 폭 기준\n3. 장애물 10h 이격 원칙, 최소 2.5h`;
   }
@@ -253,7 +303,10 @@ async function answerQuestion(request: VercelRequest, response: VercelResponse) 
       answerMode = 'local-only-fallback';
       return response.status(200).json({
         reply: answerWithoutAi(message, sourcePages),
-        sources: sourcePages.slice(0, 3).map(({ page }) => `「2026 기상관측표준화 업무가이드」 p.${page}`),
+        sources: (getPreferredPages(message).length > 0
+          ? sourcePages.filter(({ page }) => getPreferredPages(message).includes(page)).slice(0, 2)
+          : sourcePages.slice(0, 3)
+        ).map(({ page }) => `「2026 기상관측표준화 업무가이드」 p.${page}`),
         answerMode,
         suggestedQuestions: [
           '풍향·풍속계의 표준 설치 높이는?',
