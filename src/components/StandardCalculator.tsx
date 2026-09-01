@@ -160,7 +160,9 @@ export const StandardCalculator: React.FC<StandardCalculatorProps> = () => {
       return {};
     }
   }, []);
-  const [mode, setMode] = useState<Mode>(saved.mode || "home");
+  const [mode, setMode] = useState<Mode>(
+    saved.mode === "grade" ? "grade" : "home",
+  );
   const [step, setStep] = useState(saved.step || 0);
   const [instrument, setInstrument] = useState<InstrumentType>(
     saved.instrument || "wind",
@@ -447,12 +449,12 @@ export const StandardCalculator: React.FC<StandardCalculatorProps> = () => {
               기상관측시설 현장 자가진단
             </h1>
             <p className="mt-2 text-base text-slate-600">
-              측기별 관측환경과 센서 규격을 업무가이드 기준으로 확인합니다.
+              측기별 관측환경과 시설등급을 업무가이드 기준으로 진단합니다.
             </p>
           </div>
         </div>
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div>
         <button
           onClick={() => {
             setMode("grade");
@@ -472,27 +474,6 @@ export const StandardCalculator: React.FC<StandardCalculatorProps> = () => {
             진단 시작 <ArrowRight className="h-4 w-4" />
           </span>
         </button>
-        <button
-          onClick={() => setMode("spec")}
-          className="group min-h-48 rounded-2xl border-2 border-cyan-200 bg-white p-6 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-cyan-500 hover:shadow-lg"
-        >
-          <FileCheck2 className="h-9 w-9 text-cyan-600" />
-          <h2 className="mt-5 text-xl font-bold text-slate-950">
-            관측센서 표준규격 확인
-          </h2>
-          <p className="mt-2 text-base leading-relaxed text-slate-600">
-            부록 2 기준으로 측정범위, 정확도, 분해능, 운용환경 등의 적합 여부를
-            확인합니다.
-          </p>
-          <span className="mt-5 flex items-center gap-1 font-semibold text-cyan-700">
-            규격 확인 <ArrowRight className="h-4 w-4" />
-          </span>
-        </button>
-      </div>
-      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-relaxed text-amber-900">
-        <strong>검토 안내:</strong> 시설등급과 센서 규격 적합 여부는 서로 다른
-        기준이며 하나의 점수로 합산하지 않습니다. 입력자료는 현재 브라우저에만
-        저장됩니다.
       </div>
     </div>
   );
@@ -1288,7 +1269,6 @@ export const StandardCalculator: React.FC<StandardCalculatorProps> = () => {
   );
 
   if (mode === "home") return renderHome();
-  if (mode === "spec") return renderSpec();
   return (
     <div className="mx-auto max-w-6xl space-y-5 p-4 pb-28 sm:p-6">
       <div className="flex items-center justify-between gap-3">
