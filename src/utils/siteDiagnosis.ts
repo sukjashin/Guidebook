@@ -100,6 +100,16 @@ function missingFields(
   noObstacles: boolean,
 ) {
   const missing: string[] = [];
+  const commonRequired: Array<[keyof SiteForm, string]> = [
+    ["organization", "기관명"],
+    ["stationName", "관측소명"],
+    ["inspector", "점검자"],
+    ["inspectionDate", "점검일"],
+  ];
+  commonRequired.forEach(([key, label]) => {
+    if (!String(form[key]).trim()) missing.push(label);
+  });
+
   const requiredByInstrument: Record<
     InstrumentType,
     Array<[keyof SiteForm, string]>

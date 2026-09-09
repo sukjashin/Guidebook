@@ -9,10 +9,54 @@ interface GuideExplorerProps {
   onAskTopic: (question: string) => void;
 }
 
+interface TopicDetailProps {
+  topic: GuideTopic;
+  onAskTopic: (question: string) => void;
+  mobile?: boolean;
+}
+
+const TopicDetail: React.FC<TopicDetailProps> = ({ topic, onAskTopic, mobile = false }) => (
+  <div
+    id={mobile ? `topic-panel-${topic.id}` : undefined}
+    role={mobile ? 'region' : undefined}
+    aria-labelledby={mobile ? `topic-item-${topic.id}` : undefined}
+    className={`bg-slate-900 border border-slate-800 shadow-sm ${
+      mobile ? 'rounded-xl rounded-t-none border-t-0 px-4 pb-4 pt-3 -mt-2 space-y-4' : 'rounded-2xl p-6 space-y-6'
+    }`}
+  >
+    <div className="border-b border-slate-800 pb-4">
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+        <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-blue-500/20 text-blue-300 border border-blue-500/30">{topic.categoryName}</span>
+        {topic.relatedArticles && <span className="text-xs text-slate-400">근거 조항: <strong className="text-slate-300">{topic.relatedArticles}</strong></span>}
+      </div>
+      <h2 className={`${mobile ? 'text-lg' : 'text-xl'} font-bold text-slate-100`}>{topic.title}</h2>
+      <p className="text-sm text-slate-300 mt-2 leading-relaxed">{topic.summary}</p>
+    </div>
+    <div className="bg-slate-800/80 border border-slate-700/80 rounded-xl p-4">
+      <h4 className="text-xs font-bold text-blue-300 uppercase tracking-wider mb-2.5 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-blue-400" />핵심 표준 준수 기준</h4>
+      <ul className="space-y-2">{topic.keyStandards.map((item, idx) => <li key={idx} className="flex items-start space-x-2 text-sm text-slate-200"><span className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-2 flex-shrink-0" /><span>{item}</span></li>)}</ul>
+    </div>
+    <div className="prose prose-invert prose-sm max-w-none text-slate-200 bg-slate-950/40 p-5 rounded-xl border border-slate-800/80">
+      <ReactMarkdown remarkPlugins={[[remarkGfm, { singleTilde: false }]]} components={{
+        del: ({ node, ...props }) => <span {...props} />,
+        table: ({ node, ...props }) => <div className="overflow-x-auto my-3 border border-slate-700 rounded-lg"><table className="w-full text-xs text-left border-collapse" {...props} /></div>,
+        thead: ({ node, ...props }) => <thead className="bg-slate-900 text-blue-300 font-semibold border-b border-slate-700" {...props} />,
+        th: ({ node, ...props }) => <th className="p-2.5 border-r border-slate-700 last:border-r-0" {...props} />,
+        td: ({ node, ...props }) => <td className="p-2.5 border-t border-r border-slate-700/60 last:border-r-0" {...props} />,
+      }}>{topic.details.replace(/~~/g, '~')}</ReactMarkdown>
+    </div>
+    <div className="pt-2">
+      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">이 규정과 관련된 질문을 AI에게 바로 물어보기:</h4>
+      <div className="space-y-2">{topic.frequentlyAsked.map((faq, i) => <button key={i} onClick={() => onAskTopic(faq)} className="w-full flex items-center justify-between p-3 bg-slate-800/60 hover:bg-blue-600/20 hover:border-blue-500/50 border border-slate-700 rounded-xl text-left text-sm text-slate-200 transition-colors group"><span className="flex items-center space-x-2"><MessageSquare className="w-4 h-4 text-blue-400 flex-shrink-0" /><span>{faq}</span></span><span className="text-xs text-blue-400 font-medium opacity-0 group-hover:opacity-100 transition-opacity">챗봇에 질문</span></button>)}</div>
+    </div>
+  </div>
+);
+
 export const GuideExplorer: React.FC<GuideExplorerProps> = ({ onAskTopic }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedTopic, setSelectedTopic] = useState<GuideTopic>(STANDARD_GUIDE_TOPICS[0]);
+  const [expandedTopicId, setExpandedTopicId] = useState<string | null>(null);
 
   const categories = [
     { id: 'all', label: '전체 주제', icon: BookOpen },
@@ -105,26 +149,34 @@ export const GuideExplorer: React.FC<GuideExplorerProps> = ({ onAskTopic }) => {
             <div className="space-y-2 max-h-[700px] overflow-y-auto pr-1">
               {filteredTopics.map((topic) => {
                 const isCurrent = selectedTopic?.id === topic.id;
+                const isExpanded = expandedTopicId === topic.id;
                 return (
-                  <button
-                    key={topic.id}
-                    id={`topic-item-${topic.id}`}
-                    onClick={() => setSelectedTopic(topic)}
-                    className={`w-full text-left p-4 rounded-xl border transition-all ${
-                      isCurrent
-                        ? 'bg-slate-800/90 border-blue-500 shadow-md shadow-blue-500/10'
-                        : 'bg-slate-900/80 border-slate-800 hover:bg-slate-800/50 hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                        {topic.categoryName}
-                      </span>
-                      <ChevronRight className={`w-4 h-4 text-slate-500 ${isCurrent ? 'text-blue-400 translate-x-0.5' : ''} transition-transform`} />
-                    </div>
-                    <h3 className="font-semibold text-sm text-slate-100 mb-1">{topic.title}</h3>
-                    <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">{topic.summary}</p>
-                  </button>
+                  <React.Fragment key={topic.id}>
+                    <button
+                      id={`topic-item-${topic.id}`}
+                      onClick={() => {
+                        setSelectedTopic(topic);
+                        setExpandedTopicId((current) => (current === topic.id ? null : topic.id));
+                      }}
+                      aria-expanded={isExpanded}
+                      aria-controls={`topic-panel-${topic.id}`}
+                      className={`w-full text-left p-4 border transition-all ${isExpanded ? 'rounded-xl rounded-b-none lg:rounded-xl' : 'rounded-xl'} ${
+                        isExpanded
+                          ? 'bg-slate-800/90 border-blue-500 shadow-md shadow-blue-500/10'
+                          : isCurrent
+                            ? 'bg-slate-900/80 border-slate-800 lg:bg-slate-800/90 lg:border-blue-500 lg:shadow-md lg:shadow-blue-500/10'
+                            : 'bg-slate-900/80 border-slate-800 hover:bg-slate-800/50 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">{topic.categoryName}</span>
+                        <ChevronRight className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${isExpanded ? 'rotate-90 text-blue-400' : isCurrent ? 'lg:text-blue-400 lg:translate-x-0.5' : ''}`} />
+                      </div>
+                      <h3 className="font-semibold text-sm text-slate-100 mb-1">{topic.title}</h3>
+                      <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">{topic.summary}</p>
+                    </button>
+                    {isExpanded && <div className="lg:hidden"><TopicDetail topic={topic} onAskTopic={onAskTopic} mobile /></div>}
+                  </React.Fragment>
                 );
               })}
             </div>
@@ -132,7 +184,7 @@ export const GuideExplorer: React.FC<GuideExplorerProps> = ({ onAskTopic }) => {
         </div>
 
         {/* Topic Detail View */}
-        <div className="lg:col-span-8">
+        <div className="hidden lg:block lg:col-span-8">
           {selectedTopic ? (
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 shadow-sm">
               {/* Header */}

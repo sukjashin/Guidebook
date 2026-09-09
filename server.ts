@@ -723,12 +723,25 @@ function getDetailedGuideResponse(query: string): { reply: string; sources: stri
 
 // Chat API endpoint
 app.post('/api/chat', async (req, res) => {
-  const { message = '', conversationHistory = [] } = req.body;
+  const { message = '', conversationHistory: rawConversationHistory = [] } = req.body || {};
 
   if (!message || typeof message !== 'string' || message.trim() === '') {
     res.status(400).json({ error: '메시지를 입력해 주세요.' });
     return;
   }
+  if (message.length > 2000) {
+    res.status(413).json({ error: '질문은 2,000자 이내로 입력해 주세요.' });
+    return;
+  }
+
+  const conversationHistory = Array.isArray(rawConversationHistory)
+    ? rawConversationHistory.filter(
+        (turn): turn is { role: 'user' | 'assistant'; content: string } =>
+          Boolean(turn) &&
+          (turn.role === 'user' || turn.role === 'assistant') &&
+          typeof turn.content === 'string',
+      )
+    : [];
 
   const ai = getAiClient();
 
