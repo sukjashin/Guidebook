@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Search, BookOpen, ChevronRight, MessageSquare, Tag, Shield, Compass, Sliders, CheckCircle2 } from 'lucide-react';
+import { Search, BookOpen, ChevronRight, ChevronUp, MessageSquare, Tag, Shield, Compass, Sliders, CheckCircle2 } from 'lucide-react';
 import { STANDARD_GUIDE_TOPICS } from '../data/standardGuideData';
 import { GuideTopic } from '../types';
 
@@ -13,9 +13,10 @@ interface TopicDetailProps {
   topic: GuideTopic;
   onAskTopic: (question: string) => void;
   mobile?: boolean;
+  onCollapse?: () => void;
 }
 
-const TopicDetail: React.FC<TopicDetailProps> = ({ topic, onAskTopic, mobile = false }) => (
+const TopicDetail: React.FC<TopicDetailProps> = ({ topic, onAskTopic, mobile = false, onCollapse }) => (
   <div
     id={mobile ? `topic-panel-${topic.id}` : undefined}
     role={mobile ? 'region' : undefined}
@@ -49,6 +50,14 @@ const TopicDetail: React.FC<TopicDetailProps> = ({ topic, onAskTopic, mobile = f
       <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">이 규정과 관련된 질문을 AI에게 바로 물어보기:</h4>
       <div className="space-y-2">{topic.frequentlyAsked.map((faq, i) => <button key={i} onClick={() => onAskTopic(faq)} className="w-full flex items-center justify-between p-3 bg-slate-800/60 hover:bg-blue-600/20 hover:border-blue-500/50 border border-slate-700 rounded-xl text-left text-sm text-slate-200 transition-colors group"><span className="flex items-center space-x-2"><MessageSquare className="w-4 h-4 text-blue-400 flex-shrink-0" /><span>{faq}</span></span><span className="text-xs text-blue-400 font-medium opacity-0 group-hover:opacity-100 transition-opacity">챗봇에 질문</span></button>)}</div>
     </div>
+    {mobile && onCollapse && (
+      <div className="flex justify-center border-t border-slate-800 pt-5 pb-1">
+        <button type="button" onClick={onCollapse} className="group flex min-w-24 flex-col items-center gap-1.5 text-xs font-semibold text-blue-300" aria-label={`${topic.title} 내용 접기`}>
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-600/30 transition-all group-active:scale-95 group-hover:bg-blue-500"><ChevronUp className="h-6 w-6" strokeWidth={2.5} /></span>
+          <span>내용 접기</span>
+        </button>
+      </div>
+    )}
   </div>
 );
 
@@ -175,7 +184,21 @@ export const GuideExplorer: React.FC<GuideExplorerProps> = ({ onAskTopic }) => {
                       <h3 className="font-semibold text-sm text-slate-100 mb-1">{topic.title}</h3>
                       <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">{topic.summary}</p>
                     </button>
-                    {isExpanded && <div className="lg:hidden"><TopicDetail topic={topic} onAskTopic={onAskTopic} mobile /></div>}
+                    {isExpanded && (
+                      <div className="lg:hidden">
+                        <TopicDetail
+                          topic={topic}
+                          onAskTopic={onAskTopic}
+                          mobile
+                          onCollapse={() => {
+                            setExpandedTopicId(null);
+                            requestAnimationFrame(() => {
+                              document.getElementById(`topic-item-${topic.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            });
+                          }}
+                        />
+                      </div>
+                    )}
                   </React.Fragment>
                 );
               })}
