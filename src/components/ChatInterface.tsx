@@ -372,7 +372,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="궁금한 업무 기준을 입력하세요"
+            placeholder="궁금한 내용을 편하게 물어보세요"
             className="w-full bg-transparent text-slate-100 text-sm placeholder-slate-500 focus:outline-none resize-none max-h-36 min-h-[42px] sm:min-h-[48px] py-1.5 px-2 sm:px-3 leading-relaxed"
             rows={1}
           />
