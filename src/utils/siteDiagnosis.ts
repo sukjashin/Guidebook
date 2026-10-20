@@ -100,16 +100,9 @@ function missingFields(
   noObstacles: boolean,
 ) {
   const missing: string[] = [];
-  const commonRequired: Array<[keyof SiteForm, string]> = [
-    ["organization", "기관명"],
-    ["stationName", "관측소명"],
-    ["inspector", "점검자"],
-    ["inspectionDate", "점검일"],
-  ];
-  commonRequired.forEach(([key, label]) => {
-    if (!String(form[key]).trim()) missing.push(label);
-  });
 
+  // 기록용 정보는 선택 항목이므로 판정 보류 조건에서 제외한다.
+  // 실제 판정에는 측기별 핵심 입력값만 필수로 검증한다.
   const requiredByInstrument: Record<
     InstrumentType,
     Array<[keyof SiteForm, string]>

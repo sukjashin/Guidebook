@@ -38,8 +38,25 @@ const obstacle = (
 
 const missing = diagnoseSite("wind", EMPTY_SITE_FORM, [], false);
 assert.equal(missing.grade, null);
-assert.ok(missing.missing.includes("기관명"));
 assert.ok(missing.missing.includes("장애물 또는 주변 장애물 없음 선택"));
+
+const optionalMetadataAllowed = diagnoseSite(
+  "wind",
+  {
+    ...baseForm({
+      organization: "",
+      stationName: "",
+      inspector: "",
+      inspectionDate: "",
+      sensorHeight: "10",
+      roughnessLength: "0.03",
+    }),
+  },
+  [obstacle("a", { distance: "300" }), obstacle("b", { distance: "60" })],
+  false,
+);
+assert.notEqual(optionalMetadataAllowed.grade, null);
+assert.equal(optionalMetadataAllowed.grade, 3);
 
 const wind = baseForm({ sensorHeight: "10", roughnessLength: "0.03" });
 assert.equal(
