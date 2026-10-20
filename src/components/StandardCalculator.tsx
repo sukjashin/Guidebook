@@ -464,7 +464,7 @@ export const StandardCalculator: React.FC<StandardCalculatorProps> = () => {
         >
           <Ruler className="h-9 w-9 text-blue-600" />
           <h2 className="mt-5 text-xl font-bold text-slate-950">
-            기상측기별 시설등급 진단
+            예상 등급 자동 산출
           </h2>
           <p className="mt-2 text-base leading-relaxed text-slate-600">
             부록 1 기준으로 관측환경과 장애물을 분석하여 1~5등급 또는 4S·5S를
@@ -1302,7 +1302,7 @@ export const StandardCalculator: React.FC<StandardCalculatorProps> = () => {
       {renderProgress()}
       <div>
         <h1 className="text-2xl font-black text-slate-950">
-          기상측기별 시설등급 진단
+          예상 등급 자동 산출
         </h1>
         <p className="mt-1 text-base text-slate-600">
           {INSTRUMENT_LABELS[instrument]} · {STEPS[step]}
