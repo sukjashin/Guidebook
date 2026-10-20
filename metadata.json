@@ -1,0 +1,6 @@
+{
+  "name": "기상관측표준화 업무가이드 챗봇",
+  "description": "기상청 「2026 기상관측표준화 업무가이드」(156p 전권) 근거 전문 AI 챗봇 및 공문서 작성 지원 서비스",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
