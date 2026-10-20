@@ -427,6 +427,10 @@ function diagnoseSolar(
 ): DiagnosisResult {
   const shade = num(form.shadeFreeAbove)!;
   const annual = num(form.annualShadePercent)!;
+  const shadeState =
+    annual > 30
+      ? "연중 낮시간의 30% 초과하여 그늘지는 날이 있다"
+      : "연중 낮시간의 30% 초과하여 그늘지는 날이 없다";
   if (direct) {
     const grade =
       shade <= 3 ? 1 : shade <= 5 ? 2 : shade <= 7 ? 3 : annual <= 30 ? 4 : 5;
@@ -434,7 +438,7 @@ function diagnoseSolar(
       "sunshine",
       form,
       grade,
-      [`태양고도각 ${shade}° 초과 시 무그늘`, `연중 낮시간 그늘 ${annual}%`],
+      [`태양고도각 ${shade}° 초과 시 무그늘`, shadeState],
       grade > 1 ? [`${grade - 1}등급 이상 무그늘 조건 미충족`] : [],
       ["센서의 태양 시야를 확보하고 그늘 발생 시간을 줄이세요."],
       [],
@@ -471,7 +475,7 @@ function diagnoseSolar(
     "globalSolar",
     form,
     grade,
-    [`태양고도각 ${shade}° 초과 시 무그늘`, `연중 낮시간 그늘 ${annual}%`],
+    [`태양고도각 ${shade}° 초과 시 무그늘`, shadeState],
     grade > 1 ? [`${grade - 1}등급 이상 시야·반사 조건 미충족`] : [],
     ["반사성 장애물을 제거하거나 태양 시야와 무그늘 시간을 확보하세요."],
     assessed,

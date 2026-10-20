@@ -70,8 +70,8 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
               >
                 <CheckSquare className="w-4 h-4" />
-                <span className="hidden md:inline">현장 적합성 진단기</span>
-                <span className="md:hidden whitespace-nowrap">현장진단</span>
+                <span className="hidden md:inline">예상 등급 자동 산출</span>
+                <span className="md:hidden whitespace-nowrap">예상등급</span>
               </button>
 
             </nav>

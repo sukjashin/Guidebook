@@ -1,0 +1,13 @@
+flowchart LR
+    A[사용자 입력] --> B[React UI]
+    B --> C[api/chat.ts]
+    C --> D[질문 분석]
+    D --> E[로컬 검색]
+    D --> F[Gemini File Search]
+    E --> G[public/data/guide-pages.json]
+    F --> H[Gemini File Search Store]
+    G --> I[관련 문장/페이지 추출]
+    H --> I
+    I --> J[Gemini 응답 생성]
+    J --> K[답변 + 출처 + 근거]
+    K --> B

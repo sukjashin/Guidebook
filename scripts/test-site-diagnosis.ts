@@ -111,6 +111,40 @@ assert.equal(
   ).grade,
   1,
 );
+assert.equal(
+  diagnoseSite(
+    "sunshine",
+    baseForm({ shadeFreeAbove: "15", annualShadePercent: "30" }),
+    [],
+    true,
+  ).grade,
+  4,
+);
+assert.equal(
+  diagnoseSite(
+    "sunshine",
+    baseForm({ shadeFreeAbove: "15", annualShadePercent: "31" }),
+    [],
+    true,
+  ).grade,
+  5,
+);
+assert.ok(
+  diagnoseSite(
+    "sunshine",
+    baseForm({ shadeFreeAbove: "15", annualShadePercent: "30" }),
+    [],
+    true,
+  ).met.some((item) => item.includes("그늘지는 날이 없다")),
+);
+assert.ok(
+  diagnoseSite(
+    "sunshine",
+    baseForm({ shadeFreeAbove: "15", annualShadePercent: "31" }),
+    [],
+    true,
+  ).met.some((item) => item.includes("그늘지는 날이 있다")),
+);
 
 assert.equal(APPENDIX_SENSOR_SPECS.length, 12);
 assert.deepEqual(

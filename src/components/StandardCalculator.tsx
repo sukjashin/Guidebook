@@ -240,7 +240,7 @@ export const StandardCalculator: React.FC<StandardCalculatorProps> = () => {
           })
           .join("\n");
   const resultText = () =>
-    `[기상관측시설 현장 자가진단]\n기관: ${form.organization} / 시설: ${form.stationName} / 지점번호: ${form.stationNumber || "-"}\n점검자: ${form.inspector} / 점검일: ${form.inspectionDate}\n설치장소: ${form.locationType} / 주변환경: ${form.environmentDescription || "-"}\n측기: ${INSTRUMENT_LABELS[instrument]}\n특수환경: ${form.specialEnvironment ? `해당 (${form.specialReason})` : "해당 없음"}\n진단결과: ${result.displayGrade}\n\n[장애물별 계산]\n${obstacleText()}\n\n판정근거: ${result.pageReference}\n충족 기준: ${result.met.join(", ") || "-"}\n미충족 기준: ${result.unmet.join(", ") || "-"}\n누락항목: ${result.missing.join(", ") || "없음"}\n개선방법: ${result.improvements.join(", ") || "-"}\n진단일시: ${new Date().toLocaleString("ko-KR")}\n\n본 결과는 「2026 기상관측표준화 업무가이드」에 따른 사전 자가진단 결과이며, 공식 시설등급 확정 결과가 아닙니다.`;
+    `[기상관측시설 현장 자가진단]\n기관: ${form.organization} / 시설: ${form.stationName} / 지점번호: ${form.stationNumber || "-"}\n점검자: ${form.inspector} / 점검일: ${form.inspectionDate}\n설치장소: ${form.locationType} / 주변환경: ${form.environmentDescription || "-"}\n측기: ${INSTRUMENT_LABELS[instrument]}\n특수환경: ${form.specialEnvironment ? `해당 (${form.specialReason})` : "해당 없음"}\n진단결과: ${result.displayGrade}\n\n[장애물별 계산]\n${obstacleText()}\n\n판정근거: ${result.pageReference}\n충족 기준: ${result.met.join(", ") || "-"}\n미충족 기준: ${result.unmet.join(", ") || "-"}\n누락항목: ${result.missing.join(", ") || "없음"}\n개선방법: ${result.improvements.join(", ") || "-"}\n진단일시: ${new Date().toLocaleString("ko-KR")}\n\n본 결과는 기상청 고시 '기상관측시설의 기상측기별 등급 부여 기준'에 따른 예상등급이며, 시설등급의 확정 결과가 아닙니다.`;
   const copyResult = async () => {
     await navigator.clipboard.writeText(resultText());
     setCopied(true);
@@ -700,21 +700,6 @@ export const StandardCalculator: React.FC<StandardCalculatorProps> = () => {
                     required={instrument === "wind"}
                   />
                   <Field
-                    label="센서 설치 높이"
-                    value={
-                      instrument === "wind"
-                        ? form.sensorHeight
-                        : obstacle.sensorHeight
-                    }
-                    onChange={(v) =>
-                      instrument === "wind"
-                        ? updateForm("sensorHeight", v)
-                        : updateObstacle(obstacle.id, "sensorHeight", v)
-                    }
-                    type="number"
-                    unit="m"
-                  />
-                  <Field
                     label="각 너비"
                     value={obstacle.angularWidth}
                     onChange={(v) =>
@@ -728,35 +713,63 @@ export const StandardCalculator: React.FC<StandardCalculatorProps> = () => {
                       instrument === "globalSolar"
                     }
                   />
-                  <Field
-                    label="고도각"
-                    value={obstacle.angularHeight}
-                    onChange={(v) =>
-                      updateObstacle(obstacle.id, "angularHeight", v)
-                    }
-                    type="number"
-                    unit="°"
-                    required={instrument === "globalSolar"}
-                  />
-                  <Field
-                    label="장애물 알베도"
-                    value={obstacle.albedo}
-                    onChange={(v) => updateObstacle(obstacle.id, "albedo", v)}
-                    type="number"
-                    help="0.5보다 크면 반사성 장애물로 자동 분류합니다."
-                  />
-                  <Toggle
-                    checked={obstacle.single}
-                    onChange={(v) => updateObstacle(obstacle.id, "single", v)}
-                    label="단일 장애물"
-                  />
-                  <Toggle
-                    checked={obstacle.reflective}
-                    onChange={(v) =>
-                      updateObstacle(obstacle.id, "reflective", v)
-                    }
-                    label="반사성 장애물"
-                  />
+                  {instrument === "globalSolar" && (
+                    <Field
+                      label="고도각"
+                      value={obstacle.angularHeight}
+                      onChange={(v) =>
+                        updateObstacle(obstacle.id, "angularHeight", v)
+                      }
+                      type="number"
+                      unit="°"
+                      required
+                    />
+                  )}
+                  {instrument === "globalSolar" && (
+                    <div className="sm:col-span-2">
+                      <p className="mb-2 text-sm font-semibold text-slate-700">
+                        반사성 장애물 판정
+                      </p>
+                      <label className="flex min-h-12 cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <input
+                          type="checkbox"
+                          checked={obstacle.reflective}
+                          onChange={(event) =>
+                            updateObstacle(
+                              obstacle.id,
+                              "reflective",
+                              event.target.checked,
+                            )
+                          }
+                          className="mt-0.5 h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span>
+                          <span className="block text-sm font-semibold text-slate-800">
+                            반사성 장애물
+                          </span>
+                          <span className="mt-0.5 block text-xs leading-relaxed text-slate-500">
+                            알베도가 0.5보다 큰 장애물은 반사성 장애물로 처리합니다.
+                          </span>
+                        </span>
+                      </label>
+                    </div>
+                  )}
+                  {instrument !== "globalSolar" && (
+                    <Toggle
+                      checked={obstacle.single}
+                      onChange={(v) => updateObstacle(obstacle.id, "single", v)}
+                      label="단일 장애물"
+                    />
+                  )}
+                  {instrument === "wind" && (
+                    <Toggle
+                      checked={obstacle.reflective}
+                      onChange={(v) =>
+                        updateObstacle(obstacle.id, "reflective", v)
+                      }
+                      label="반사성 장애물"
+                    />
+                  )}
                   <Toggle
                     checked={obstacle.terrainChange}
                     onChange={(v) =>
@@ -1038,8 +1051,7 @@ export const StandardCalculator: React.FC<StandardCalculatorProps> = () => {
           </div>
         </div>
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium leading-relaxed text-amber-900">
-          본 결과는 「2026 기상관측표준화 업무가이드」에 따른 사전 자가진단
-          결과이며, 공식 시설등급 확정 결과가 아닙니다.
+          본 결과는 기상청 고시 '기상관측시설의 기상측기별 등급 부여 기준'에 따른 예상등급이며, 시설등급의 확정 결과가 아닙니다.
         </div>
       </div>
     );

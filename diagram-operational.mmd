@@ -1,0 +1,17 @@
+flowchart TD
+    A[사용자] --> B[Guidebook Frontend]
+    B --> C[Vercel API]
+    C --> D[Environment Variables]
+    D --> E[GEMINI_API_KEY]
+    D --> F[GEMINI_FILE_SEARCH_STORES]
+    C --> G[PDF Index Builder]
+    G --> H[tmp/pdfs]
+    H --> I[scripts/sync-guide-document.mjs]
+    I --> J[public/data/guide-pages.json]
+    J --> K[Local Retrieval Layer]
+    C --> L[Gemini Model]
+    K --> L
+    M[File Search Store] --> L
+    L --> N[답변 생성]
+    N --> O[출처 / 근거 / 대답]
+    O --> B
