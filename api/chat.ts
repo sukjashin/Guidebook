@@ -50,12 +50,17 @@ interface VercelResponse {
   status(code: number): VercelResponse;
   json(body: unknown): void;
 }
-interface GuidePage { page: number; text: string; sourceFile?: string; docCategory?: string; title?: string; }
+interface GuidePage { page: number; text: string; sourceFile?: string; docCategory?: string; title?: string; primary?: boolean; }
 interface GuideIndex { pages: GuidePage[]; }
 
 const STOP_WORDS = new Set(['알려줘', '알려주세요', '무엇인가요', '어떻게', '기준은', '방법은', '대한', '관련', '질문']);
 const normalize = (text: string) => text.toLowerCase().replace(/[^0-9a-z가-힣]/g, '');
 let guideIndex: GuideIndex | undefined;
+
+const MAIN_GUIDE_TITLE = '2026 기상관측표준화 업무가이드';
+// 쪽 번호 기반 규칙(우선 쪽, 쪽 지정 질문, 앞부분 목차 제외)은 본편 업무가이드에만 적용한다.
+const isMainGuidePage = (page: GuidePage) => page.primary === true || !page.sourceFile;
+const sourceLabel = (page: GuidePage) => `「${isMainGuidePage(page) ? MAIN_GUIDE_TITLE : page.title || page.sourceFile}」 p.${page.page}`;
 
 function getFileSearchStoreNames() {
   const rawValue = [process.env.GEMINI_FILE_SEARCH_STORES, process.env.GEMINI_FILE_SEARCH_STORE]
@@ -164,6 +169,7 @@ export function findRelevantPages(message: string): GuidePage[] {
   const requestedPage = message.match(/(?:^|\s)(\d{1,3})\s*(?:쪽|페이지|p\.?)(?:\s|$)/i)?.[1];
   const preferredPages = getPreferredPages(message);
   const indexedPages = getGuideIndex().pages.map((page) => ({ page, corpus: normalize(page.text) }));
+  const totalPages = Math.max(1, indexedPages.length);
   const documentFrequencies = new Map(terms.map((term) => [
     term,
     indexedPages.reduce((count, item) => count + (item.corpus.includes(term) ? 1 : 0), 0),
@@ -171,10 +177,13 @@ export function findRelevantPages(message: string): GuidePage[] {
 
   return indexedPages
     .map(({ page, corpus }) => {
+      const main = isMainGuidePage(page);
+      const isRequested = main && requestedPage === String(page.page);
+      const isFrontMatter = main && page.page <= 10 && !isRequested;
       const heading = normalize(page.text.split(/\n/).slice(0, 12).join(' '));
       const matched = terms.filter((term) => corpus.includes(term));
       const termScore = matched.reduce((total, term) => {
-        const rarity = Math.log2(157 / Math.max(1, documentFrequencies.get(term) || 1));
+        const rarity = Math.log2(totalPages / Math.max(1, documentFrequencies.get(term) || 1));
         return total + Math.min(term.length, 10) * Math.max(1, rarity);
       }, 0);
       const phraseLength = longestPhraseMatch(query, corpus);
@@ -183,12 +192,11 @@ export function findRelevantPages(message: string): GuidePage[] {
         + (matched.length === terms.length ? 12 : matched.length * 2)
         + phraseLength * phraseLength
         + headingPhraseLength * headingPhraseLength * 2
-        + (preferredPages.includes(page.page) ? 5_000 : 0)
-        + (requestedPage === String(page.page) ? 10_000 : 0)
-        - (page.page <= 10 && requestedPage !== String(page.page) ? 30 : 0);
-      return { page, score };
+        + (main && preferredPages.includes(page.page) ? 5_000 : 0)
+        + (isRequested ? 10_000 : 0);
+      return { page, score, isFrontMatter };
     })
-    .filter(({ page, score }) => score >= 10 && (page.page > 10 || requestedPage === String(page.page)))
+    .filter(({ score, isFrontMatter }) => score >= 10 && !isFrontMatter)
     .sort((a, b) => b.score - a.score)
     .slice(0, 6)
     .map(({ page }) => page);
@@ -316,10 +324,10 @@ async function searchGuide(ai: any, message: string) {
 
 async function answerFromLocalIndex(ai: any, message: string, pages: GuidePage[]) {
   if (pages.length === 0) return undefined;
-  const excerpts = pages.map(({ page, text }) => `[업무가이드 ${page}쪽]\n${text}`).join('\n\n');
+  const excerpts = pages.map((page) => `[${sourceLabel(page)}]\n${page.text}`).join('\n\n');
   return ai.models.generateContent({
     model: process.env.GEMINI_MODEL || 'gemini-3.7-flash',
-    contents: `아래 내용은 「2026 기상관측표준화 업무가이드」에서 질문과 관련성이 높은 쪽을 추출한 것입니다. 아래 근거만 사용해 답하고, 근거가 부족하면 지정된 자료 없음 문구로 답하십시오.\n\n${excerpts}\n\n질문: ${message}`,
+    contents: `아래 내용은 「2026 기상관측표준화 업무가이드」 및 관련 안내자료에서 질문과 관련성이 높은 쪽을 추출한 것입니다. 아래 근거만 사용해 답하고, 근거가 부족하면 지정된 자료 없음 문구로 답하십시오.\n\n${excerpts}\n\n질문: ${message}`,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
       thinkingConfig: { thinkingLevel: 'LOW' },
@@ -379,9 +387,9 @@ async function answerQuestion(request: VercelRequest, response: VercelResponse) 
       return response.status(200).json({
         reply: answerWithoutAi(message, sourcePages),
         sources: (getPreferredPages(message).length > 0
-          ? sourcePages.filter(({ page }) => getPreferredPages(message).includes(page)).slice(0, 2)
+          ? sourcePages.filter((page) => isMainGuidePage(page) && getPreferredPages(message).includes(page.page)).slice(0, 2)
           : sourcePages.slice(0, 3)
-        ).map(({ page }) => `「2026 기상관측표준화 업무가이드」 p.${page}`),
+        ).map(sourceLabel),
         answerMode,
         suggestedQuestions: getRelatedQuestions(message),
       });
@@ -390,7 +398,7 @@ async function answerQuestion(request: VercelRequest, response: VercelResponse) 
     return response.status(200).json({
       reply: aiResponse.text?.trim() || NOT_FOUND_REPLY,
       sources: sourcePages.length > 0
-        ? sourcePages.map(({ page, sourceFile }) => sourceFile ? `「${sourceFile}」 p.${page}` : `「2026 기상관측표준화 업무가이드」 p.${page}`)
+        ? sourcePages.map(sourceLabel)
         : ['「2026 기상관측표준화 업무가이드」 원본 PDF 전체(156쪽)'],
       usage: calculateUsage(aiResponse.usageMetadata),
       answerMode,

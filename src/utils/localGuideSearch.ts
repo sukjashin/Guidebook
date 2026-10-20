@@ -7,8 +7,15 @@ export interface GuideSearchResult {
 }
 
 interface DocumentIndex {
-  pages: Array<{ page: number; text: string }>;
+  pages: GuidePage[];
 }
+
+interface GuidePage { page: number; text: string; sourceFile?: string; title?: string; primary?: boolean }
+
+const MAIN_GUIDE_TITLE = '2026 기상관측표준화 업무가이드';
+// 앞부분 목차 감점은 본편 업무가이드에만 적용한다.
+const isMainGuidePage = (page: GuidePage) => page.primary === true || !page.sourceFile;
+const sourceLabel = (page: GuidePage) => `「${isMainGuidePage(page) ? MAIN_GUIDE_TITLE : page.title || page.sourceFile}」 p.${page.page}`;
 
 const INTENTS = [
   { topicId: 'law-overview', keywords: ['관측망', '지점번호', '신규', '이전', '폐지', '관리계획', '1km', '중복설치'] },
@@ -111,28 +118,29 @@ const searchDocument = async (query: string) => {
   const { terms } = getTerms(query);
   const chunks = index.pages.flatMap((page) => {
     const text = page.text.replace(/\n{2,}/g, '\n').trim();
-    const result: Array<{ page: number; excerpt: string; score: number }> = [];
+    const result: Array<{ key: string; label: string; excerpt: string; score: number }> = [];
     for (let start = 0; start < text.length; start += 400) {
       const excerpt = text.slice(start, start + 700);
       if (excerpt.length < 40) continue;
       const matched = terms.filter((term) => normalize(excerpt).includes(term));
       const coverageBonus = matched.length === terms.length && terms.length > 1 ? 15 : matched.length * 2;
       result.push({
-        page: page.page,
+        key: `${page.sourceFile || ''}#${page.page}`,
+        label: sourceLabel(page),
         excerpt,
-        score: scoreText(excerpt, terms) + coverageBonus - (page.page <= 10 ? 12 : 0),
+        score: scoreText(excerpt, terms) + coverageBonus - (isMainGuidePage(page) && page.page <= 10 ? 12 : 0),
       });
     }
     return result;
   });
 
-  const seenPages = new Set<number>();
+  const seenPages = new Set<string>();
   return chunks
     .filter(({ score }) => score >= 8)
     .sort((a, b) => b.score - a.score)
-    .filter(({ page }) => {
-      if (seenPages.has(page)) return false;
-      seenPages.add(page);
+    .filter(({ key }) => {
+      if (seenPages.has(key)) return false;
+      seenPages.add(key);
       return true;
     })
     .slice(0, 3);
@@ -140,12 +148,12 @@ const searchDocument = async (query: string) => {
 
 const withEvidence = (
   result: GuideSearchResult,
-  matches: Array<{ page: number; excerpt: string }>,
+  matches: Array<{ label: string; excerpt: string }>,
 ): GuideSearchResult => {
   if (matches.length === 0) return result;
   return {
     ...result,
-    sources: [...new Set([...result.sources, ...matches.map(({ page }) => `「2026 기상관측표준화 업무가이드」 p.${page}`)])],
+    sources: [...new Set([...result.sources, ...matches.map(({ label }) => label)])],
   };
 };
 

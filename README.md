@@ -24,6 +24,14 @@ GitHub 저장소의 **Settings > Secrets and variables > Actions > Variables**�
 
 그 후 Actions의 **Deploy to GitHub Pages** 워크플로를 다시 실행합니다. 이 값은 공개 API 주소이며 Gemini API 키가 아닙니다. `GEMINI_API_KEY`는 Vercel에만 저장해야 합니다.
 
+## 검색 인덱스 갱신
+
+`public/data/guide-pages.json`은 저장소에 커밋된 파일을 GitHub Pages와 Vercel이 함께 사용합니다. 빌드 중에는 다시 생성하지 않습니다.
+
+1. 본편 PDF를 `tmp/pdfs/2026-weather-observation-guide.pdf`로 저장합니다(없으면 Google Drive에서 내려받기를 시도합니다).
+2. 추가 안내자료 PDF는 `tmp/pdfs/` 아래 폴더에 넣습니다.
+3. `npm run sync:guide` 실행 후 변경된 `guide-pages.json`을 커밋합니다.
+
 ## 로컬 실행
 
 1. `npm install`

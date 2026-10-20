@@ -6,6 +6,8 @@ import { PDFParse } from 'pdf-parse';
 
 const DRIVE_FILE_ID = '1mKGsdUcqDWuKhhFvduSwy9RAy46G36Ns';
 const DRIVE_DOWNLOAD_URL = `https://drive.usercontent.google.com/download?id=${DRIVE_FILE_ID}&export=download&confirm=t`;
+const MAIN_GUIDE_FILE_NAME = '2026-weather-observation-guide.pdf';
+const MAIN_GUIDE_TITLE = '2026 기상관측표준화 업무가이드';
 const pdfDirectory = fileURLToPath(new URL('../tmp/pdfs/', import.meta.url));
 const indexPath = fileURLToPath(new URL('../public/data/guide-pages.json', import.meta.url));
 
@@ -53,23 +55,25 @@ function inferTitle(filePath) {
 await mkdir(pdfDirectory, { recursive: true });
 await mkdir(path.dirname(indexPath), { recursive: true });
 
-let pdfFiles = await collectPdfFiles(pdfDirectory);
-if (pdfFiles.length === 0) {
-  const singlePdfPath = path.join(pdfDirectory, '2026-weather-observation-guide.pdf');
-  if (!existsSync(singlePdfPath)) {
-    console.log('Google Drive에서 업무가이드 PDF를 내려받는 중입니다...');
-    const response = await fetch(DRIVE_DOWNLOAD_URL);
-    if (!response.ok) {
-      throw new Error(`Drive PDF 다운로드 실패: HTTP ${response.status}`);
-    }
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (new TextDecoder('ascii').decode(bytes.slice(0, 5)) !== '%PDF-') {
-      throw new Error('다운로드한 파일이 PDF 형식이 아닙니다. Drive 공유 권한을 확인하세요.');
-    }
-    await writeFile(singlePdfPath, bytes);
+// 본편 업무가이드는 tmp/pdfs에 다른 PDF가 있어도 항상 색인에 포함한다.
+const mainGuidePath = path.join(pdfDirectory, MAIN_GUIDE_FILE_NAME);
+if (!existsSync(mainGuidePath)) {
+  console.log('Google Drive에서 업무가이드 PDF를 내려받는 중입니다...');
+  const response = await fetch(DRIVE_DOWNLOAD_URL);
+  if (!response.ok) {
+    throw new Error(`Drive PDF 다운로드 실패: HTTP ${response.status}`);
   }
-  pdfFiles = [singlePdfPath];
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (new TextDecoder('ascii').decode(bytes.slice(0, 5)) !== '%PDF-') {
+    throw new Error('다운로드한 파일이 PDF 형식이 아닙니다. Drive 공유 권한을 확인하세요.');
+  }
+  await writeFile(mainGuidePath, bytes);
 }
+
+const pdfFiles = [
+  mainGuidePath,
+  ...(await collectPdfFiles(pdfDirectory)).filter((file) => path.resolve(file) !== path.resolve(mainGuidePath)),
+];
 
 const allPages = [];
 for (const absolutePath of pdfFiles) {
@@ -82,13 +86,15 @@ for (const absolutePath of pdfFiles) {
   await parser.destroy();
 
   const sourceFile = path.relative(process.cwd(), pdfPath).replace(/\\/g, '/');
-  const docCategory = inferCategory(pdfPath);
-  const title = inferTitle(pdfPath);
+  const primary = path.resolve(pdfPath) === path.resolve(mainGuidePath);
+  const docCategory = primary ? '업무가이드' : inferCategory(pdfPath);
+  const title = primary ? MAIN_GUIDE_TITLE : inferTitle(pdfPath);
 
   const filePages = (result.pages || []).map((page) => ({
     sourceFile,
     docCategory,
     title,
+    ...(primary ? { primary: true } : {}),
     page: page.num,
     text: page.text.replace(/\u0000/g, '').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim(),
   }));
@@ -100,11 +106,11 @@ await writeFile(
   indexPath,
   JSON.stringify(
     {
-      title: '2026 기상관측표준화 업무가이드',
+      title: MAIN_GUIDE_TITLE,
       publicationNumber: '11-1360000-100230-14',
       sourceFileId: DRIVE_FILE_ID,
       sourceUrl: `https://drive.google.com/file/d/${DRIVE_FILE_ID}/view`,
-      sourceFiles: allPages.map(({ sourceFile, docCategory, title }) => ({ sourceFile, docCategory, title })),
+      sourceFiles: [...new Map(allPages.map(({ sourceFile, docCategory, title }) => [sourceFile, { sourceFile, docCategory, title }])).values()],
       pageCount: allPages.length,
       generatedAt: new Date().toISOString(),
       pages: allPages,
