@@ -419,14 +419,29 @@ export const StandardCalculator: React.FC<StandardCalculatorProps> = () => {
           unit="°"
           required
         />
-        <Field
-          label="연중 낮 시간 중 그늘 발생 비율"
-          value={form.annualShadePercent}
-          onChange={(v) => updateForm("annualShadePercent", v)}
-          type="number"
-          unit="%"
-          required
-        />
+        <label className="space-y-1.5 text-sm font-semibold text-slate-700">
+          연중 낮시간에 그늘지는 날이 있나요?
+          <select
+            value={
+              form.annualShadePercent === "yes"
+                ? "yes"
+                : form.annualShadePercent === "no"
+                  ? "no"
+                  : ""
+            }
+            onChange={(e) =>
+              updateForm(
+                "annualShadePercent",
+                e.target.value as SiteForm["annualShadePercent"],
+              )
+            }
+            className={inputClass}
+          >
+            <option value="">선택하세요</option>
+            <option value="no">없다</option>
+            <option value="yes">있다</option>
+          </select>
+        </label>
         <Toggle
           checked={form.naturalTerrainShadow}
           onChange={(v) => updateForm("naturalTerrainShadow", v)}

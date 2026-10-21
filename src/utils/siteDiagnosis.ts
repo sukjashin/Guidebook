@@ -90,6 +90,11 @@ const pageReference: Record<InstrumentType, string> = {
 };
 
 const num = (value: string) => (value.trim() === "" ? null : Number(value));
+const annualShadeValue = (value: string) => {
+  if (value === "yes") return 31;
+  if (value === "no") return 0;
+  return num(value) ?? 0;
+};
 const isNumber = (value: number | null): value is number =>
   value !== null && Number.isFinite(value);
 
@@ -419,7 +424,7 @@ function diagnoseSolar(
   direct: boolean,
 ): DiagnosisResult {
   const shade = num(form.shadeFreeAbove)!;
-  const annual = num(form.annualShadePercent)!;
+  const annual = annualShadeValue(form.annualShadePercent);
   const shadeState =
     annual > 30
       ? "연중 낮시간에 그늘지는 날이 있다"
