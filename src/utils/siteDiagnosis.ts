@@ -422,8 +422,8 @@ function diagnoseSolar(
   const annual = num(form.annualShadePercent)!;
   const shadeState =
     annual > 30
-      ? "연중 낮시간의 30% 초과하여 그늘지는 날이 있다"
-      : "연중 낮시간의 30% 초과하여 그늘지는 날이 없다";
+      ? "연중 낮시간에 그늘지는 날이 있다"
+      : "연중 낮시간에 그늘지는 날이 없다";
   if (direct) {
     const grade =
       shade <= 3 ? 1 : shade <= 5 ? 2 : shade <= 7 ? 3 : annual <= 30 ? 4 : 5;
