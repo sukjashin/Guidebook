@@ -420,7 +420,7 @@ export const StandardCalculator: React.FC<StandardCalculatorProps> = () => {
           required
         />
         <label className="space-y-1.5 text-sm font-semibold text-slate-700">
-          연중 낮시간에 그늘지는 날이 있나요?
+          연중 낮시간에 30% 초과하여 그늘지는 날이 있나요?
           <select
             value={
               form.annualShadePercent === "yes"
