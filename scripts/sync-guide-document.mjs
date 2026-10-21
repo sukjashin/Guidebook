@@ -8,6 +8,7 @@ const DRIVE_FILE_ID = '1mKGsdUcqDWuKhhFvduSwy9RAy46G36Ns';
 const DRIVE_DOWNLOAD_URL = `https://drive.usercontent.google.com/download?id=${DRIVE_FILE_ID}&export=download&confirm=t`;
 const MAIN_GUIDE_FILE_NAME = '2026-weather-observation-guide.pdf';
 const MAIN_GUIDE_TITLE = '2026 기상관측표준화 업무가이드';
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 const pdfDirectory = fileURLToPath(new URL('../tmp/pdfs/', import.meta.url));
 const indexPath = fileURLToPath(new URL('../public/data/guide-pages.json', import.meta.url));
 
@@ -55,8 +56,23 @@ function inferTitle(filePath) {
 await mkdir(pdfDirectory, { recursive: true });
 await mkdir(path.dirname(indexPath), { recursive: true });
 
-// 본편 업무가이드는 tmp/pdfs에 다른 PDF가 있어도 항상 색인에 포함한다.
 const mainGuidePath = path.join(pdfDirectory, MAIN_GUIDE_FILE_NAME);
+if (!existsSync(mainGuidePath) && existsSync(indexPath)) {
+  const existingIndex = JSON.parse(await readFile(indexPath, 'utf8'));
+  const mainPages = (existingIndex.pages || []).filter((page) => page.primary === true || page.sourceFile === 'tmp/pdfs/2026-weather-observation-guide.pdf');
+  const cleanedIndex = {
+    ...existingIndex,
+    sourceFiles: [...new Map(mainPages.map(({ sourceFile, docCategory, title }) => [sourceFile, { sourceFile, docCategory, title }])).values()],
+    pageCount: mainPages.length,
+    generatedAt: new Date().toISOString(),
+    pages: mainPages,
+  };
+  await writeFile(indexPath, JSON.stringify(cleanedIndex, null, 2), 'utf8');
+  console.log('기존 인덱스에서 추가 문서들을 제거하고 본편 업무가이드만 유지했습니다.');
+  process.exit(0);
+}
+
+// 본편 업무가이드만 색인에 포함한다.
 if (!existsSync(mainGuidePath)) {
   console.log('Google Drive에서 업무가이드 PDF를 내려받는 중입니다...');
   const response = await fetch(DRIVE_DOWNLOAD_URL);
@@ -70,10 +86,7 @@ if (!existsSync(mainGuidePath)) {
   await writeFile(mainGuidePath, bytes);
 }
 
-const pdfFiles = [
-  mainGuidePath,
-  ...(await collectPdfFiles(pdfDirectory)).filter((file) => path.resolve(file) !== path.resolve(mainGuidePath)),
-];
+const pdfFiles = [mainGuidePath];
 
 const allPages = [];
 for (const absolutePath of pdfFiles) {
