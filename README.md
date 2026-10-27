@@ -28,9 +28,19 @@ GitHub 저장소의 **Settings > Secrets and variables > Actions > Variables**�
 
 `public/data/guide-pages.json`은 저장소에 커밋된 파일을 GitHub Pages와 Vercel이 함께 사용합니다. 빌드 중에는 다시 생성하지 않습니다.
 
-1. 본편 PDF를 `tmp/pdfs/2026-weather-observation-guide.pdf`로 저장합니다(없으면 Google Drive에서 내려받기를 시도합니다).
-2. 추가 안내자료 PDF는 `tmp/pdfs/` 아래 폴더에 넣습니다.
-3. `npm run sync:guide` 실행 후 변경된 `guide-pages.json`을 커밋합니다.
+1. `npm run sync:guide`를 실행합니다. 본편 PDF가 없으면 Google Drive에서 내려받고, `guide-pages.json`에는 본편 업무가이드만 포함합니다.
+2. 변경된 `guide-pages.json`을 커밋합니다.
+
+## Gemini File Search 문서 등록
+
+File Search 저장소에는 `tmp/pdfs/2026-weather-observation-guide.pdf` 한 파일만 등록합니다. 다른 PDF는 업로드하지 않습니다.
+
+1. `npm run sync:guide`를 실행해 본편 PDF를 `tmp/pdfs/2026-weather-observation-guide.pdf`에 준비합니다.
+2. `.env.local`에 `GEMINI_API_KEY`와 `GEMINI_MODEL`(선택)을 설정합니다.
+3. `npm run setup:file-search -- --force`를 실행해 본편 PDF만 포함하는 새 저장소를 생성합니다.
+4. 출력된 `GEMINI_FILE_SEARCH_STORE` 값을 Vercel 환경변수에 등록하고 API를 다시 배포합니다.
+
+새 저장소를 만들면 챗봇은 그 저장소 하나만 사용합니다. 이전 저장소는 자동 삭제되지 않으므로, 더 이상 필요하지 않은 이전 저장소는 Google AI Studio에서 별도로 삭제해야 합니다.
 
 ## 로컬 실행
 

@@ -3,7 +3,6 @@ export const maxDuration = 60;
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
-const DEFAULT_FILE_SEARCH_STORE = 'fileSearchStores/2026weatherobservationstand-8m5v3hoo957q';
 const NOT_FOUND_REPLY = '죄송합니다. 요청하신 내용에 대해서는 제공된 자료(파일) 내에서 확인되지 않습니다.';
 const USD_TO_KRW = 1415;
 const INPUT_USD_PER_MILLION = 0.75;
@@ -61,19 +60,6 @@ const MAIN_GUIDE_TITLE = '2026 기상관측표준화 업무가이드';
 // 쪽 번호 기반 규칙(우선 쪽, 쪽 지정 질문, 앞부분 목차 제외)은 본편 업무가이드에만 적용한다.
 const isMainGuidePage = (page: GuidePage) => page.primary === true || !page.sourceFile;
 const sourceLabel = (page: GuidePage) => `「${isMainGuidePage(page) ? MAIN_GUIDE_TITLE : page.title || page.sourceFile}」 p.${page.page}`;
-
-function getFileSearchStoreNames() {
-  const rawValue = [process.env.GEMINI_FILE_SEARCH_STORES, process.env.GEMINI_FILE_SEARCH_STORE]
-    .filter(Boolean)
-    .join(',');
-
-  const stores = rawValue
-    .split(',')
-    .map((name) => name.trim())
-    .filter(Boolean);
-
-  return stores.length > 0 ? stores : [DEFAULT_FILE_SEARCH_STORE];
-}
 
 function getSearchTerms(message: string) {
   return [...new Set(message.toLowerCase().split(/[^0-9a-z가-힣]+/)
@@ -309,13 +295,13 @@ function mergeUsageMetadata(...items: any[]) {
   }), { promptTokenCount: 0, toolUsePromptTokenCount: 0, candidatesTokenCount: 0, thoughtsTokenCount: 0, totalTokenCount: 0 });
 }
 
-async function searchGuide(ai: any, message: string) {
+async function searchGuide(ai: any, message: string, storeName: string) {
   return ai.models.generateContent({
     model: process.env.GEMINI_MODEL || 'gemini-3.7-flash',
     contents: `반드시 File Search 도구를 사용하여 「2026 기상관측표준화 업무가이드」에서 질문과 관련된 규정, 일정, 절차, 표, 수치와 앞뒤 문맥을 먼저 찾으십시오. 메일·공문·안내문 작성 요청도 검색한 업무가이드 근거만 반영하여 문안을 끝까지 완성하십시오.\n\n질문: ${message}`,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
-      tools: [{ fileSearch: { fileSearchStoreNames: getFileSearchStoreNames() } }],
+      tools: [{ fileSearch: { fileSearchStoreNames: [storeName] } }],
       thinkingConfig: { thinkingLevel: 'LOW' },
       maxOutputTokens: 2400,
     },
@@ -327,7 +313,7 @@ async function answerFromLocalIndex(ai: any, message: string, pages: GuidePage[]
   const excerpts = pages.map((page) => `[${sourceLabel(page)}]\n${page.text}`).join('\n\n');
   return ai.models.generateContent({
     model: process.env.GEMINI_MODEL || 'gemini-3.7-flash',
-    contents: `아래 내용은 「2026 기상관측표준화 업무가이드」 및 관련 안내자료에서 질문과 관련성이 높은 쪽을 추출한 것입니다. 아래 근거만 사용해 답하고, 근거가 부족하면 지정된 자료 없음 문구로 답하십시오.\n\n${excerpts}\n\n질문: ${message}`,
+    contents: `아래 내용은 「2026 기상관측표준화 업무가이드」 본편에서 질문과 관련성이 높은 쪽을 추출한 것입니다. 아래 근거만 사용해 답하고, 근거가 부족하면 지정된 자료 없음 문구로 답하십시오.\n\n${excerpts}\n\n질문: ${message}`,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
       thinkingConfig: { thinkingLevel: 'LOW' },
@@ -345,6 +331,8 @@ async function answerQuestion(request: VercelRequest, response: VercelResponse) 
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return response.status(503).json({ error: 'Vercel 환경변수 GEMINI_API_KEY가 설정되지 않았습니다.' });
+    const storeName = process.env.GEMINI_FILE_SEARCH_STORE?.trim();
+    if (!storeName || storeName.includes(',')) return response.status(503).json({ error: 'Vercel 환경변수 GEMINI_FILE_SEARCH_STORE에 본편 가이드 전용 저장소 하나를 설정해 주세요.' });
 
     const { GoogleGenAI } = await import('@google/genai');
     const ai = new GoogleGenAI({ apiKey });
@@ -354,7 +342,7 @@ async function answerQuestion(request: VercelRequest, response: VercelResponse) 
     let quotaExceeded = false;
     let answerMode = 'file-search';
     try {
-      searchResponse = await searchGuide(ai, message);
+      searchResponse = await searchGuide(ai, message, storeName);
       const searchReply = searchResponse.text?.trim() || '';
       // File Search가 답변을 반환했으면 grounding 메타데이터 유무와 관계없이 사용한다.
       // 메타데이터는 모델/SDK 버전에 따라 생략될 수 있으며, 이를 실패로 취급하면
