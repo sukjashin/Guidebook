@@ -31,16 +31,11 @@ GitHub 저장소의 **Settings > Secrets and variables > Actions > Variables**�
 1. `npm run sync:guide`를 실행합니다. 본편 PDF가 없으면 Google Drive에서 내려받고, `guide-pages.json`에는 본편 업무가이드만 포함합니다.
 2. 변경된 `guide-pages.json`을 커밋합니다.
 
-## Gemini File Search 문서 등록
+## Gemini API 설정
 
-File Search 저장소에는 `tmp/pdfs/2026-weather-observation-guide.pdf` 한 파일만 등록합니다. 다른 PDF는 업로드하지 않습니다.
+챗봇은 저장소에 커밋된 `public/data/guide-pages.json`에서 질문과 관련된 본편 가이드 쪽만 찾아 Gemini에 전달합니다. 별도의 Gemini File Search 저장소나 `GEMINI_FILE_SEARCH_STORE` 환경변수는 필요하지 않습니다. 따라서 추가 문서 업로드에 따른 검색 지연도 발생하지 않습니다.
 
-1. `npm run sync:guide`를 실행해 본편 PDF를 `tmp/pdfs/2026-weather-observation-guide.pdf`에 준비합니다.
-2. `.env.local`에 `GEMINI_API_KEY`와 `GEMINI_MODEL`(선택)을 설정합니다.
-3. `npm run setup:file-search -- --force`를 실행해 본편 PDF만 포함하는 새 저장소를 생성합니다.
-4. 출력된 `GEMINI_FILE_SEARCH_STORE` 값을 Vercel 환경변수에 등록하고 API를 다시 배포합니다.
-
-새 저장소를 만들면 챗봇은 그 저장소 하나만 사용합니다. 이전 저장소는 자동 삭제되지 않으므로, 더 이상 필요하지 않은 이전 저장소는 Google AI Studio에서 별도로 삭제해야 합니다.
+Vercel에는 `GEMINI_API_KEY`와 선택 사항인 `GEMINI_MODEL`만 설정하면 됩니다. 로컬에서 실행할 때는 `.env.local`에 `GEMINI_API_KEY`를 설정합니다.
 
 ## 로컬 실행
 

@@ -12,7 +12,7 @@ const SYSTEM_INSTRUCTION = `# Role (역할)
 당신은 '기상관측표준화'에 관한 모든 지식을 갖춘 전문 비서입니다. 사용자의 질문에 언제나 예의 바르고 공손하며, 정확하고 전문적인 어조로 답변합니다.
 
 # Knowledge Base & Source Rule (답변 출처 엄격 제약)
-1. 모든 답변은 업로드된 추가 파일인 「2026 기상관측표준화 업무가이드」의 내용에만 철저히 기반해야 합니다.
+1. 모든 답변은 제공된 검색 색인에 포함된 「2026 기상관측표준화 업무가이드」 본편의 내용에만 철저히 기반해야 합니다.
 2. 문서에 명시되지 않은 내용이나 개인적인 추측·생각·일반적인 외부 지식은 절대로 포함하지 마십시오.
 3. 문서에서 답을 찾을 수 없으면 억지로 답변을 생성하지 말고 다음 문장만 출력하십시오.
 "${NOT_FOUND_REPLY}"
@@ -264,11 +264,6 @@ function answerWithoutAi(message: string, pages: GuidePage[]) {
   return NOT_FOUND_REPLY;
 }
 
-function isQuotaError(error: unknown) {
-  const detail = error instanceof Error ? error.message : String(error);
-  return detail.includes('429') || detail.includes('RESOURCE_EXHAUSTED') || detail.toLowerCase().includes('quota');
-}
-
 function calculateUsage(usageMetadata: any) {
   const inputTokens = (usageMetadata?.promptTokenCount || 0) + (usageMetadata?.toolUsePromptTokenCount || 0);
   const answerTokens = usageMetadata?.candidatesTokenCount || 0;
@@ -283,29 +278,6 @@ function calculateUsage(usageMetadata: any) {
     estimatedCostKrw: Math.round(estimatedCostUsd * USD_TO_KRW),
     priceBasis: 'Gemini 3.7 Flash Standard, 2026-12-31까지의 공식 단가 기준',
   };
-}
-
-function mergeUsageMetadata(...items: any[]) {
-  return items.reduce((total, item) => ({
-    promptTokenCount: total.promptTokenCount + (item?.promptTokenCount || 0),
-    toolUsePromptTokenCount: total.toolUsePromptTokenCount + (item?.toolUsePromptTokenCount || 0),
-    candidatesTokenCount: total.candidatesTokenCount + (item?.candidatesTokenCount || 0),
-    thoughtsTokenCount: total.thoughtsTokenCount + (item?.thoughtsTokenCount || 0),
-    totalTokenCount: total.totalTokenCount + (item?.totalTokenCount || 0),
-  }), { promptTokenCount: 0, toolUsePromptTokenCount: 0, candidatesTokenCount: 0, thoughtsTokenCount: 0, totalTokenCount: 0 });
-}
-
-async function searchGuide(ai: any, message: string, storeName: string) {
-  return ai.models.generateContent({
-    model: process.env.GEMINI_MODEL || 'gemini-3.7-flash',
-    contents: `반드시 File Search 도구를 사용하여 「2026 기상관측표준화 업무가이드」에서 질문과 관련된 규정, 일정, 절차, 표, 수치와 앞뒤 문맥을 먼저 찾으십시오. 메일·공문·안내문 작성 요청도 검색한 업무가이드 근거만 반영하여 문안을 끝까지 완성하십시오.\n\n질문: ${message}`,
-    config: {
-      systemInstruction: SYSTEM_INSTRUCTION,
-      tools: [{ fileSearch: { fileSearchStoreNames: [storeName] } }],
-      thinkingConfig: { thinkingLevel: 'LOW' },
-      maxOutputTokens: 2400,
-    },
-  });
 }
 
 async function answerFromLocalIndex(ai: any, message: string, pages: GuidePage[]) {
@@ -331,43 +303,17 @@ async function answerQuestion(request: VercelRequest, response: VercelResponse) 
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return response.status(503).json({ error: 'Vercel 환경변수 GEMINI_API_KEY가 설정되지 않았습니다.' });
-    const storeName = process.env.GEMINI_FILE_SEARCH_STORE?.trim();
-    if (!storeName || storeName.includes(',')) return response.status(503).json({ error: 'Vercel 환경변수 GEMINI_FILE_SEARCH_STORE에 본편 가이드 전용 저장소 하나를 설정해 주세요.' });
 
     const { GoogleGenAI } = await import('@google/genai');
     const ai = new GoogleGenAI({ apiKey });
-    let searchResponse: any;
     let aiResponse: any;
-    let sourcePages: GuidePage[] = [];
-    let quotaExceeded = false;
-    let answerMode = 'file-search';
+    const sourcePages = findRelevantPages(message);
+    let answerMode = 'local-index';
     try {
-      searchResponse = await searchGuide(ai, message, storeName);
-      const searchReply = searchResponse.text?.trim() || '';
-      // File Search가 답변을 반환했으면 grounding 메타데이터 유무와 관계없이 사용한다.
-      // 메타데이터는 모델/SDK 버전에 따라 생략될 수 있으며, 이를 실패로 취급하면
-      // 매 요청마다 큰 PDF를 다시 업로드하게 되어 서버리스 시간 제한을 초과한다.
-      if (searchReply) {
-        aiResponse = searchResponse;
-      }
+      aiResponse = await answerFromLocalIndex(ai, message, sourcePages);
     } catch (error) {
-      quotaExceeded = isQuotaError(error);
-      console.warn('Gemini File Search 실패, 원본 PDF 전체 확인으로 전환합니다.', error);
-    }
-    if (!aiResponse) {
-      answerMode = 'local-index-fallback';
-      sourcePages = findRelevantPages(message);
-      if (!quotaExceeded) {
-        try {
-          const localResponse = await answerFromLocalIndex(ai, message, sourcePages);
-          if (localResponse) {
-            localResponse.usageMetadata = mergeUsageMetadata(searchResponse?.usageMetadata, localResponse.usageMetadata);
-            aiResponse = localResponse;
-          }
-        } catch (error) {
-          console.warn('Gemini 로컬 색인 답변 실패, 서버 내장 답변으로 전환합니다.', error);
-        }
-      }
+      console.warn('Gemini 색인 기반 답변 실패, 서버 내장 답변으로 전환합니다.', error);
+      answerMode = 'local-only-fallback';
     }
 
     if (!aiResponse) {
@@ -387,15 +333,15 @@ async function answerQuestion(request: VercelRequest, response: VercelResponse) 
       reply: aiResponse.text?.trim() || NOT_FOUND_REPLY,
       sources: sourcePages.length > 0
         ? sourcePages.map(sourceLabel)
-        : ['「2026 기상관측표준화 업무가이드」 원본 PDF 전체(156쪽)'],
+        : [],
       usage: calculateUsage(aiResponse.usageMetadata),
       answerMode,
       suggestedQuestions: getRelatedQuestions(message),
     });
   } catch (error) {
-    console.error('Vercel native PDF chat error:', error);
+    console.error('Vercel guidebook chat error:', error);
     const detail = error instanceof Error ? error.message : '알 수 없는 오류';
-    return response.status(500).json({ error: '원본 PDF를 확인하여 답변하는 중 오류가 발생했습니다.', detail });
+    return response.status(500).json({ error: '업무가이드 검색 결과로 답변하는 중 오류가 발생했습니다.', detail });
   }
 }
 
@@ -407,7 +353,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
   response.setHeader('Vary', 'Origin');
   response.setHeader('Cache-Control', 'no-store');
   if (request.method === 'OPTIONS') return response.status(204).json({});
-  if (request.method === 'GET') return response.status(200).json({ status: 'ok', service: 'Guidebook native PDF chatbot' });
+  if (request.method === 'GET') return response.status(200).json({ status: 'ok', service: 'Guidebook indexed chatbot' });
   if (request.method === 'POST') return answerQuestion(request, response);
   return response.status(405).json({ error: '지원하지 않는 요청 방식입니다.' });
 }
