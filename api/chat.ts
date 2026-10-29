@@ -7,6 +7,7 @@ const NOT_FOUND_REPLY = '죄송합니다. 요청하신 내용에 대해서는 �
 const USD_TO_KRW = 1415;
 const INPUT_USD_PER_MILLION = 0.75;
 const OUTPUT_USD_PER_MILLION = 3.75;
+const AI_TIMEOUT_MS = 8_000;
 
 const SYSTEM_INSTRUCTION = `# Role (역할)
 당신은 '기상관측표준화'에 관한 모든 지식을 갖춘 전문 비서입니다. 사용자의 질문에 언제나 예의 바르고 공손하며, 정확하고 전문적인 어조로 답변합니다.
@@ -81,6 +82,8 @@ function longestPhraseMatch(query: string, corpus: string) {
 function getPreferredPages(message: string) {
   const query = normalize(message);
   if (query.includes('중복') && (query.includes('기상관측시설') || query.includes('aws') || query.includes('강수량계'))) return [41];
+  if (query.includes('강수량계') && query.includes('설치') && (query.includes('단계') || query.includes('절차'))) return [33, 30, 41];
+  if (query.includes('강수량계') && (query.includes('설치') || query.includes('수수구') || query.includes('이격'))) return [30];
   if (query.includes('신규') && (query.includes('조치') || query.includes('절차'))) return [33];
   if (query.includes('폐지') && (query.includes('조치') || query.includes('절차'))) return [33];
   if (query.includes('이전') && (query.includes('조치') || query.includes('절차'))) return [34];
@@ -232,7 +235,49 @@ function buildReadableEvidenceAnswer(message: string, pages: GuidePage[]) {
   return `질문에 답변드립니다.\n\n### 본문 답변\n\n${facts.map(({ text }) => `- ${text}`).join('\n')}\n\n### 근거\n\n- ${evidencePages.map((label) => `「${label}」`).join(', ')}\n\n■ 핵심 요약\n${summaries.join('\n')}`;
 }
 
+function getQuickGuideAnswer(message: string, pages: GuidePage[]) {
+  const query = normalize(message);
+  const installationSteps = [
+    '강수량계 설치단계에 대해 알려줘',
+    '강수량계 설치절차를 알려줘',
+    '강수량계 신규 설치 절차를 알려줘',
+  ].some((question) => normalize(question) === query);
+  const installationStandards = [
+    '강수량계 설치기준을 알려줘',
+    '강수량계 설치기준',
+    '강수량계 수수구의 표준 설치 높이는 얼마인가요?',
+    '강수량계와 주변 장애물의 이격 기준은 어떻게 계산하나요?',
+  ].some((question) => normalize(question) === query);
+  if (!installationSteps && !installationStandards) return undefined;
+
+  const standardPage = pages.find((page) => isMainGuidePage(page) && page.page === 30);
+  const text = standardPage?.text.replace(/\s+/g, ' ') || '';
+  const standards = [
+    text.match(/수수구의 높이는 지면 또는 옥상 바닥면에서 30cm 이상/)?.[0],
+    text.match(/주변 장애물로부터 수수구와 장애물 높이 차이의 최소 0\.5배 이상 떨어져 설치/)?.[0],
+    text.match(/강수량계 주위에 바람 보호막 설치를 권장/)?.[0],
+  ];
+  // 빠른 답변도 현재 색인에서 세 기준을 모두 확인한 경우에만 제공한다.
+  if (!standardPage || standards.some((standard) => !standard)) return undefined;
+  const evidence = [standardPage];
+  let body = `### 강수량계 설치기준\n\n${standards.map((standard) => `- ${standard}`).join('\n')}`;
+  if (installationSteps) {
+    const procedurePage = pages.find((page) => isMainGuidePage(page) && page.page === 33);
+    const required = ['신규설치 계획 반영 여부 확인', '중복설치', '관측 환경 적합 여부 검토', '형식승인 및 검정', '표준지점번호 신청서', '센서정보', '실시간 전송'];
+    const procedureText = procedurePage?.text.replace(/\s+/g, ' ') || '';
+    if (!procedurePage || !required.every((term) => procedureText.includes(term))) return undefined;
+    evidence.unshift(procedurePage);
+    body = `### 강수량계 신규 설치 절차\n\n1. 기상관측망 구축 및 관리계획에 신규설치 계획이 반영됐는지 확인합니다.\n2. 설치 예정지의 중복설치 여부와 관측환경 적합 여부를 검토합니다. 필요하면 기상청 기술지원반에 사전 검토를 요청합니다.\n3. 형식승인 및 검정을 받은 측기를 도입하고 측기별 설치기준에 따라 설치합니다.\n4. 관측자료 전송 체계를 확인하고, 설치 완료 후 표준지점번호 신청서를 공문으로 제출합니다.\n5. 기상청 안내에 따라 검정증명서와 동일한 센서정보를 관측메타데이터시스템에 등록하고 관측자료를 실시간 전송합니다.\n\n${body}`;
+  }
+  return {
+    reply: `질문에 답변드립니다.\n\n${body}\n\n■ 핵심 요약\n1. ${standards[0]}\n2. ${standards[1]}\n3. ${standards[2]}`,
+    sources: evidence.map(sourceLabel),
+  };
+}
+
 function answerWithoutAi(message: string, pages: GuidePage[]) {
+  const quickAnswer = getQuickGuideAnswer(message, pages);
+  if (quickAnswer) return quickAnswer.reply;
   const query = normalize(message);
   if (query.includes('중복') && (query.includes('기상관측시설') || query.includes('aws') || query.includes('강수량계'))) {
     return `질문에 답변드립니다.\n\n### 결론\n\n기상재해 감시 목적의 자동기상관측장비(AWS)와 강수량계는 **설치 예정지를 기준으로 반경 1km 이내 중복설치를 제한**하는 것이 원칙입니다. 다만 관측 목적과 지역 특성에 따라 제외 또는 예외 유지 심사를 받을 수 있습니다.\n\n### 적용 기준\n\n- **AWS:** 기상기후·방재기상 등 기상재해 감시 목적 장비는 1km 이내 설치가 금지됩니다.\n- **강수량계:** AWS와 동일하게 1km 기준을 적용하되, 관측기관이 요청하면 예외 허용 여부를 심사합니다.\n- **제외 대상:** 농업·산악·교통·수문·환경·응용 등 특수목적 기상관측 6개 분야는 AWS 중복검토 대상에서 제외됩니다. 우량경보, 교통안전, 산사태·산불감시 장비 등이 예시입니다.\n\n### 신규·이전 설치 전 확인 절차\n\n1. 관측메타데이터시스템(OMDS)에 접속합니다.\n2. **통계/모니터링 → 관측중복 확인** 메뉴로 이동합니다.\n3. 설치 예정지의 위도·경도와 반경 1km를 입력해 주변 관측장비를 확인합니다.\n4. 중복 가능성이 있으면 설치 전에 중복설치 검토 요청 공문을 제출해 검토받습니다.\n\n### 강수량계가 중복될 때 유지 우선순위\n\n1. 관련 법령의 명시적 규정에 따라 설치한 시설\n2. AWS에 포함된 강수량계\n3. 관측소 시설등급이 높은 시설\n4. 인증제도를 준수한 시설\n5. 관측기간이 오래된 시설\n\n### 예외 유지 절차\n\n지역 특성, 고도차 또는 고유 설치목적 때문에 유지가 필요하면 **기상청 조치요구 → 관측기관의 유지 사유 제출 → 기상청 현장실사·협의조정 → 기상관측표준화위원회 심의** 순서로 결정합니다.\n\n### 근거\n\n- 「2026 기상관측표준화 업무가이드」 p.41`;
@@ -246,7 +291,7 @@ function answerWithoutAi(message: string, pages: GuidePage[]) {
   if (query.includes('관리계획') && (query.includes('메일') || query.includes('공문') || query.includes('안내'))) {
     return `질문에 답변드립니다.\n\n### 안내 메일 문안\n\n제목: 기상관측망 구축 및 관리계획 변경사항 제출 안내\n\n안녕하십니까. 광주지방기상청 관측과입니다.\n\n「2026 기상관측표준화 업무가이드」에 따라 기상관측시설의 신규 설치·이전·교체·폐지 등 변경사항을 반영한 기상관측망 구축 및 관리계획 변경계획을 제출하여 주시기 바랍니다.\n\n- 제출기한: 7월 31일까지\n- 제출내용: 관측시설 신규·이전·교체·폐지 등 변경사항과 향후 추진계획\n- 유의사항: 관측시설 간 최소이격거리, 설치환경 및 표준지점번호 부여 기준을 함께 확인\n\n기한 내 제출하여 주시기 바라며, 문의사항은 광주지방기상청 관측과(062-720-0553)로 연락해 주시기 바랍니다.\n\n감사합니다.\n\n■ 핵심 요약\n1. 변경계획 제출기한은 7월 31일입니다.\n2. 신규·이전·교체·폐지 사항을 반영합니다.\n3. 설치 및 지점 관리 기준을 함께 확인합니다.`;
   }
-  if (query.includes('검정') && (query.includes('유효기간') || query.includes('수수료') || query.includes('면제'))) {
+  if (query.includes('검정') && (query.includes('유효기간') || query.includes('면제'))) {
     return `질문에 답변드립니다.\n\n- 검정 유효기간 3년: 온도계, 기압계, 습도계, 풍향계, 풍속계, 강수량계\n- 검정 유효기간 5년: 일조계, 일사계, 증발계, 적설계\n- 검정 수수료는 유효기간 만료 10일 전까지 신청하면 전액 면제됩니다.\n\n■ 핵심 요약\n1. 주요 측기 유효기간은 3년입니다.\n2. 일조·일사·증발·적설계는 5년입니다.\n3. 만료 10일 전까지 신청해야 수수료가 면제됩니다.`;
   }
   if (query.includes('검정불합격') || (query.includes('불합격') && query.includes('사후관리'))) {
@@ -280,18 +325,36 @@ function calculateUsage(usageMetadata: any) {
   };
 }
 
-async function answerFromLocalIndex(ai: any, message: string, pages: GuidePage[]) {
+export async function answerFromLocalIndex(ai: any, message: string, pages: GuidePage[], timeoutMs = AI_TIMEOUT_MS) {
   if (pages.length === 0) return undefined;
   const excerpts = pages.map((page) => `[${sourceLabel(page)}]\n${page.text}`).join('\n\n');
-  return ai.models.generateContent({
-    model: process.env.GEMINI_MODEL || 'gemini-3.7-flash',
-    contents: `아래 내용은 「2026 기상관측표준화 업무가이드」 본편에서 질문과 관련성이 높은 쪽을 추출한 것입니다. 아래 근거만 사용해 답하고, 근거가 부족하면 지정된 자료 없음 문구로 답하십시오.\n\n${excerpts}\n\n질문: ${message}`,
-    config: {
-      systemInstruction: SYSTEM_INSTRUCTION,
-      thinkingConfig: { thinkingLevel: 'LOW' },
-      maxOutputTokens: 2400,
-    },
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error('AI_RESPONSE_TIMEOUT'));
+      controller.abort();
+    }, timeoutMs);
   });
+  try {
+    const result = await Promise.race([
+      Promise.resolve().then(() => ai.models.generateContent({
+        model: process.env.GEMINI_MODEL || 'gemini-3.7-flash',
+        contents: `아래 내용은 「2026 기상관측표준화 업무가이드」 본편에서 질문과 관련성이 높은 쪽을 추출한 것입니다. 아래 근거만 사용해 답하고, 근거가 부족하면 지정된 자료 없음 문구로 답하십시오.\n\n${excerpts}\n\n질문: ${message}`,
+        config: {
+          abortSignal: controller.signal,
+          httpOptions: { timeout: timeoutMs, retryOptions: { attempts: 1 } },
+          systemInstruction: SYSTEM_INSTRUCTION,
+          thinkingConfig: { thinkingLevel: 'LOW' },
+          maxOutputTokens: 2400,
+        },
+      })),
+      deadline,
+    ]);
+    return result?.text?.trim() ? result : undefined;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function answerQuestion(request: VercelRequest, response: VercelResponse) {
@@ -301,13 +364,22 @@ async function answerQuestion(request: VercelRequest, response: VercelResponse) 
     if (!message) return response.status(400).json({ error: '질문을 입력해 주세요.' });
     if (message.length > 2000) return response.status(413).json({ error: '질문은 2,000자 이내로 입력해 주세요.' });
 
+    const sourcePages = findRelevantPages(message);
+    const quickAnswer = getQuickGuideAnswer(message, sourcePages);
+    if (quickAnswer || sourcePages.length === 0) {
+      return response.status(200).json({
+        ...(quickAnswer || { reply: NOT_FOUND_REPLY, sources: [] }),
+        answerMode: 'guide-extract',
+        suggestedQuestions: getRelatedQuestions(message),
+      });
+    }
+
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return response.status(503).json({ error: 'Vercel 환경변수 GEMINI_API_KEY가 설정되지 않았습니다.' });
 
     const { GoogleGenAI } = await import('@google/genai');
     const ai = new GoogleGenAI({ apiKey });
     let aiResponse: any;
-    const sourcePages = findRelevantPages(message);
     let answerMode = 'local-index';
     try {
       aiResponse = await answerFromLocalIndex(ai, message, sourcePages);
