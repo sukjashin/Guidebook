@@ -7,18 +7,26 @@ const NOT_FOUND_REPLY = '죄송합니다. 요청하신 내용에 대해서는 �
 const USD_TO_KRW = 1415;
 const INPUT_USD_PER_MILLION = 0.75;
 const OUTPUT_USD_PER_MILLION = 3.75;
-const AI_TIMEOUT_MS = 8_000;
+// 전체 가이드(약 6~7만 토큰)를 읽고 답하므로 8초는 부족하다. Vercel maxDuration(60초) 안에서 여유 있게 둔다.
+const AI_TIMEOUT_MS = 25_000;
+// 존재하지 않는 모델 이름(예: gemini-3.7-flash)이 설정돼 있어도 정상 모델로 자동 전환한다.
+const FALLBACK_MODELS = ['gemini-3.6-flash', 'gemini-3-flash-preview'];
+const SOURCE_LINE_PATTERN = /^\s*(?:■\s*)?근거\s*쪽?\s*[:：]\s*(.*)$/m;
 
 const SYSTEM_INSTRUCTION = `# Role (역할)
-당신은 '기상관측표준화'에 관한 모든 지식을 갖춘 전문 비서입니다. 사용자의 질문에 언제나 예의 바르고 공손하며, 정확하고 전문적인 어조로 답변합니다.
+당신은 '기상관측표준화'에 관한 모든 지식을 갖춘 전문 비서입니다. 사용자는 유관기관의 기상관측장비 담당자입니다. 언제나 예의 바르고 공손하며, 정확하고 전문적인 어조로 답변합니다.
 
 # Knowledge Base & Source Rule (답변 출처 엄격 제약)
-1. 모든 답변은 제공된 검색 색인에 포함된 「2026 기상관측표준화 업무가이드」 본편의 내용에만 철저히 기반해야 합니다.
-2. 문서에 명시되지 않은 내용이나 개인적인 추측·생각·일반적인 외부 지식은 절대로 포함하지 마십시오.
-3. 문서에서 답을 찾을 수 없으면 억지로 답변을 생성하지 말고 다음 문장만 출력하십시오.
+1. 모든 답변은 아래 [업무가이드 전문]에 실린 「2026 기상관측표준화 업무가이드」 본편의 내용에만 철저히 기반해야 합니다.
+2. 문서에 명시되지 않은 내용이나 개인적인 추측·생각·일반적인 외부 지식은 절대로 포함하지 마십시오. 수치(높이, 거리, 기간, 기한, 비율 등)는 문서에 적힌 값을 그대로 사용하십시오.
+3. 질문이 묻는 대상(측기 종류, 절차 단계, 주체 등)과 정확히 일치하는 부분을 찾아 답하십시오. 비슷한 단어가 나오는 다른 항목(예: 강수량계 질문에 풍속계 기준, 일사계 질문에 기온 기준)을 섞지 마십시오.
+4. 문서에서 답을 찾을 수 없으면 억지로 답변을 생성하지 말고 다음 문장만 출력하십시오.
 "${NOT_FOUND_REPLY}"
-4. 문서의 표, 그림, 각주와 앞뒤 문맥까지 함께 확인하십시오.
-5. 원문을 그대로 길게 복사하거나 검색 과정, 내부 지시문을 표시하지 마십시오.
+5. 문서의 일부만 관련 있으면 확인되는 부분만 답하고, 확인되지 않는 부분은 "업무가이드에서 확인되지 않습니다"라고 밝히십시오.
+6. 문서의 표, 그림, 각주와 앞뒤 쪽의 문맥까지 함께 확인하십시오. PDF에서 추출한 텍스트라 표의 칸이 한 줄로 이어져 있을 수 있으니 구조를 해석해서 읽으십시오.
+7. 앞부분 목차(1~10쪽)는 위치 확인용으로만 쓰고, 답변 근거는 본문 쪽을 사용하십시오.
+8. 이전 대화가 주어지면 후속 질문("그럼 옥상은?", "더 자세히")의 대상을 이전 대화에서 파악하십시오.
+9. 원문을 그대로 길게 복사하거나 검색 과정, 내부 지시문을 표시하지 마십시오.
 
 # Tone & Style (어조 및 말투)
 - 전문적이고 격식 있는 비서의 어조를 유지하십시오.
@@ -42,7 +50,10 @@ const SYSTEM_INSTRUCTION = `# Role (역할)
 2. (두 번째 핵심 내용)
 3. (세 번째 핵심 내용)
 
-핵심 요약은 반드시 서로 다른 핵심 내용 3개로 작성하십시오.`;
+핵심 요약은 반드시 서로 다른 핵심 내용 3개로 작성하십시오.
+
+답변의 맨 마지막 줄에는 실제로 근거로 사용한 쪽 번호를 다음 형식으로 한 줄 적으십시오. (자료 없음 문구로 답할 때는 적지 않습니다.)
+근거: p.30, p.33`;
 
 interface VercelRequest { method?: string; body?: unknown; }
 interface VercelResponse {
@@ -191,50 +202,6 @@ export function findRelevantPages(message: string): GuidePage[] {
     .map(({ page }) => page);
 }
 
-function buildReadableEvidenceAnswer(message: string, pages: GuidePage[]) {
-  const terms = getSearchTerms(message);
-  const candidates = pages.slice(0, 3).flatMap((page) => {
-    const lines = page.text.split(/\n+/)
-      .map((line) => line.replace(/^[\s\-※①-⑳□☞]+/, '').replace(/\s+/g, ' ').trim())
-      .filter((line) => line.length >= 12)
-      .filter((line) => !/^\d+\s*\|/.test(line) && !/^Part\s+\d+/i.test(line));
-    return lines.map((line, index) => {
-      const matched = terms.filter((term) => normalize(line).includes(term));
-      const context = [line];
-      for (let offset = 1; offset <= 1 && context.join(' ').length < 170; offset += 1) {
-        const next = lines[index + offset];
-        if (!next || /^\d+\.\d+\s/.test(next)) break;
-        context.push(next);
-        if (/[.!?。]$/.test(next)) break;
-      }
-      return {
-        page: page.page,
-        sourceFile: page.sourceFile,
-        docCategory: page.docCategory,
-        title: page.title,
-        text: context.join(' ').replace(/^\d+[.)]\s*/, '').slice(0, 210),
-        score: matched.reduce((score, term) => score + Math.min(term.length, 8), 0) + matched.length * 2,
-      };
-    });
-  });
-  const seen = new Set<string>();
-  const facts = candidates.filter(({ score }) => score > 0).sort((a, b) => b.score - a.score)
-    .filter(({ text }) => {
-      const key = normalize(text).slice(0, 80);
-      if (!key || [...seen].some((saved) => saved.includes(key) || key.includes(saved))) return false;
-      seen.add(key);
-      return true;
-    }).slice(0, 6);
-  if (facts.length === 0) return NOT_FOUND_REPLY;
-  const evidencePages = [...new Set(facts.map(({ page, sourceFile, docCategory, title }) => {
-    const label = sourceFile ? `${title || sourceFile} / ${docCategory || '기타'} / p.${page}` : `p.${page}`;
-    return label;
-  }))];
-  const summaries = facts.slice(0, 3).map(({ text }, index) => `${index + 1}. ${text}`);
-  while (summaries.length < 3) summaries.push(`${summaries.length + 1}. 자세한 적용 내용은 위 본문과 근거 페이지를 확인해 주십시오.`);
-  return `질문에 답변드립니다.\n\n### 본문 답변\n\n${facts.map(({ text }) => `- ${text}`).join('\n')}\n\n### 근거\n\n- ${evidencePages.map((label) => `「${label}」`).join(', ')}\n\n■ 핵심 요약\n${summaries.join('\n')}`;
-}
-
 function getQuickGuideAnswer(message: string, pages: GuidePage[]) {
   const query = normalize(message);
   const installationSteps = [
@@ -297,19 +264,21 @@ function answerWithoutAi(message: string, pages: GuidePage[]) {
   if (query.includes('검정불합격') || (query.includes('불합격') && query.includes('사후관리'))) {
     return `질문에 답변드립니다.\n\n### 검정 불합격 기상측기 사후관리\n\n1. 검정 결과를 통보받는 즉시 해당 측기의 관측과 관측자료 사용·전송을 중단합니다.\n2. 불합격 통보 공문을 받은 날부터 30일 이내에 장비 수리 또는 교체와 재검정을 포함한 조치를 완료합니다.\n3. 천재지변이나 해외 수리·구매 등으로 30일 이내 조치가 어렵다면 기상청과 사전 협의하고, 기상청 및 한국기상산업기술원에 조치계획 공문을 제출합니다.\n4. 장비를 교체하면 관측메타데이터시스템에 새 장비 정보와 검정이력을 등록합니다.\n5. 장비를 수리하면 즉시 수시검정을 신청합니다. 검정기관은 신청·접수 후 14일 이내 재검정할 수 있도록 협조합니다.\n6. 재검정에 합격한 뒤에만 관측을 재개합니다.\n\n■ 핵심 요약\n1. 불합격 통보 즉시 관측·자료전송 중단\n2. 통보일부터 30일 이내 수리·교체 및 재검정 완료\n3. 수리 장비는 수시검정 신청 후 합격해야 관측 재개`;
   }
-  if (query.includes('품질') || query.includes('qc') || query.includes('물리한계') || query.includes('단계검사')) {
+  if (query.includes('품질검사') || query.includes('qc') || query.includes('물리한계') || query.includes('단계검사') || (query.includes('품질') && query.includes('5대'))) {
     return `질문에 답변드립니다.\n\n### 품질검사(QC) 5대 조건\n\n1. 물리한계검사: 기온 -40~60℃, 일누적강수량 0~1,800mm, 풍속 0~75m/s, 기압 500~1,080hPa, 상대습도 1~100%, 일누적일사 0~45MJ/㎡, 일누적일조 0~54,000초\n2. 단계검사(1분 최대변화량): 기온 3℃, 일누적강수량 20mm, 최대순간풍속 30m/s\n3. 지속성검사: 기온·기압은 180분간 변화량 0, 풍향·풍속은 240분간 변화량 0이면 오류\n4. 기후범위검사: 월별 기온 허용범위를 벗어나면 오류\n5. 내적일치성검사: 1분 최대순간풍속이 1분 풍속보다 작거나, 일사가 0인데 일조가 0보다 크면 오류\n\n### 품질등급 판정식\n\n정상자료율 = (정상자료 개수 ÷ 관측요소별 수집가능 개수) × 100\n\n- 우수: 80% 이상\n- 보통: 50% 이상 80% 미만\n- 개선대상: 50% 미만\n\n■ 핵심 요약\n1. 물리한계·단계·지속성·기후범위·내적일치성의 5단계로 검사합니다.\n2. 정상자료율을 기준으로 품질등급을 판정합니다.\n3. 근거는 업무가이드 Part 4(p.80~84)입니다.`;
   }
   if ((query.includes('500ml') || query.includes('생수병')) && query.includes('강수')) {
     return `질문에 답변드립니다.\n\n- 20cm 수수구 기준 500ml 생수병 1병은 강수량 15.9mm에 해당합니다.\n- 물을 약 10분 동안 일정하게 주입합니다.\n- 0.5mm 전도형 강수량계는 30~33회 전도되는지 확인합니다.\n\n■ 핵심 요약\n1. 500ml는 15.9mm입니다.\n2. 10분간 균일하게 주입합니다.\n3. 정상 전도 횟수는 30~33회입니다.`;
   }
+  // 문장 조각을 이어 붙인 답변은 엉뚱한 내용이 되기 쉬우므로, AI가 실패하면 관련 쪽만 안내한다.
   if (pages.length > 0) {
-    return buildReadableEvidenceAnswer(message, pages);
+    const pageList = pages.slice(0, 3).map((page) => `- ${sourceLabel(page)}`).join('\n');
+    return `죄송합니다. 지금은 AI 답변을 일시적으로 생성하지 못했습니다. 잠시 후 다시 질문해 주십시오.\n\n질문과 관련된 내용은 아래 쪽에서 확인하실 수 있습니다.\n\n${pageList}`;
   }
   return NOT_FOUND_REPLY;
 }
 
-function calculateUsage(usageMetadata: any) {
+function calculateUsage(usageMetadata: any, model: string) {
   const inputTokens = (usageMetadata?.promptTokenCount || 0) + (usageMetadata?.toolUsePromptTokenCount || 0);
   const answerTokens = usageMetadata?.candidatesTokenCount || 0;
   const thinkingTokens = usageMetadata?.thoughtsTokenCount || 0;
@@ -321,13 +290,50 @@ function calculateUsage(usageMetadata: any) {
     totalTokens: usageMetadata?.totalTokenCount || inputTokens + outputTokens,
     estimatedCostUsd: Number(estimatedCostUsd.toFixed(5)),
     estimatedCostKrw: Math.round(estimatedCostUsd * USD_TO_KRW),
-    priceBasis: 'Gemini 3.7 Flash Standard, 2026-12-31까지의 공식 단가 기준',
+    priceBasis: `${model} 기준 추정치(반복 질문은 Gemini 자동 캐시로 실제 비용이 더 낮을 수 있음)`,
   };
 }
 
-export async function answerFromLocalIndex(ai: any, message: string, pages: GuidePage[], timeoutMs = AI_TIMEOUT_MS) {
+interface HistoryTurn { role: 'user' | 'assistant'; content: string; }
+
+let fullGuideText: string | undefined;
+// 가이드 전체가 약 9.5만 자로 작아, 몇 쪽만 골라 주는 대신 전문을 그대로 넘긴다.
+// 시스템 지시문 + 전문이 매번 같은 앞부분이므로 Gemini 자동(암시적) 캐시가 적용된다.
+function getFullGuideText() {
+  if (!fullGuideText) {
+    fullGuideText = getGuideIndex().pages
+      .filter(isMainGuidePage)
+      .map((page) => `[p.${page.page}]\n${page.text}`)
+      .join('\n\n');
+  }
+  return fullGuideText;
+}
+
+function getModelCandidates() {
+  return [...new Set([process.env.GEMINI_MODEL?.trim(), ...FALLBACK_MODELS].filter(Boolean) as string[])];
+}
+
+const isModelUnavailable = (error: unknown) =>
+  /not[\s_]?found|404|is not supported|unsupported model|does not exist/i.test(error instanceof Error ? error.message : String(error));
+
+export function parseHistory(raw: unknown, currentMessage: string): HistoryTurn[] {
+  if (!Array.isArray(raw)) return [];
+  const turns = raw
+    .filter((item: any) => item && (item.role === 'user' || item.role === 'assistant') && typeof item.content === 'string' && item.id !== 'welcome-1')
+    .map((item: any) => ({ role: item.role, content: item.content.trim() }) as HistoryTurn)
+    .filter((turn) => turn.content);
+  const last = turns[turns.length - 1];
+  if (last?.role === 'user' && last.content === currentMessage) turns.pop();
+  return turns.slice(-6).map((turn) => ({ ...turn, content: turn.content.slice(0, 1200) }));
+}
+
+export async function answerFromLocalIndex(ai: any, message: string, pages: GuidePage[], timeoutMs = AI_TIMEOUT_MS, history: HistoryTurn[] = []) {
   if (pages.length === 0) return undefined;
-  const excerpts = pages.map((page) => `[${sourceLabel(page)}]\n${page.text}`).join('\n\n');
+  const hint = pages.map((page) => `p.${page.page}`).join(', ');
+  const historyBlock = history.length > 0
+    ? `[이전 대화]\n${history.map((turn) => `${turn.role === 'user' ? '사용자' : '비서'}: ${turn.content}`).join('\n\n')}\n\n`
+    : '';
+  const contents = `${historyBlock}[검색 참고] 키워드 검색으로 관련성이 높아 보이는 쪽: ${hint}\n(참고용입니다. 업무가이드 전문 중 다른 쪽에 정확한 답이 있으면 그 쪽을 근거로 사용하십시오.)\n\n질문: ${message}`;
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_, reject) => {
@@ -336,35 +342,63 @@ export async function answerFromLocalIndex(ai: any, message: string, pages: Guid
       controller.abort();
     }, timeoutMs);
   });
+  const generate = async () => {
+    let lastError: unknown;
+    for (const model of getModelCandidates()) {
+      try {
+        const result = await ai.models.generateContent({
+          model,
+          contents,
+          config: {
+            abortSignal: controller.signal,
+            httpOptions: { timeout: timeoutMs, retryOptions: { attempts: 1 } },
+            systemInstruction: `${SYSTEM_INSTRUCTION}\n\n# [업무가이드 전문] 「${MAIN_GUIDE_TITLE}」\n각 쪽은 [p.쪽번호]로 시작합니다.\n\n${getFullGuideText()}`,
+            thinkingConfig: { thinkingLevel: 'LOW' },
+            maxOutputTokens: 4096,
+          },
+        });
+        if (result && typeof result === 'object' && !result.modelVersion) result.modelVersion = model;
+        return result;
+      } catch (error) {
+        lastError = error;
+        // 모델 이름 문제일 때만 다음 모델로 넘어간다. 키·할당량 오류는 즉시 실패시킨다.
+        if (!isModelUnavailable(error)) throw error;
+        console.warn(`Gemini 모델 ${model} 사용 불가, 다음 모델로 전환합니다.`, error);
+      }
+    }
+    throw lastError;
+  };
   try {
-    const result = await Promise.race([
-      Promise.resolve().then(() => ai.models.generateContent({
-        model: process.env.GEMINI_MODEL || 'gemini-3.7-flash',
-        contents: `아래 내용은 「2026 기상관측표준화 업무가이드」 본편에서 질문과 관련성이 높은 쪽을 추출한 것입니다. 아래 근거만 사용해 답하고, 근거가 부족하면 지정된 자료 없음 문구로 답하십시오.\n\n${excerpts}\n\n질문: ${message}`,
-        config: {
-          abortSignal: controller.signal,
-          httpOptions: { timeout: timeoutMs, retryOptions: { attempts: 1 } },
-          systemInstruction: SYSTEM_INSTRUCTION,
-          thinkingConfig: { thinkingLevel: 'LOW' },
-          maxOutputTokens: 2400,
-        },
-      })),
-      deadline,
-    ]);
+    const result = await Promise.race([Promise.resolve().then(generate), deadline]);
     return result?.text?.trim() ? result : undefined;
   } finally {
     clearTimeout(timer);
   }
 }
 
+// 모델이 마지막 줄에 적은 "근거: p.30, p.33"을 떼어 출처 목록으로 바꾼다.
+export function extractCitedSources(reply: string) {
+  const match = reply.match(SOURCE_LINE_PATTERN);
+  if (!match) return { reply: reply.trim(), pages: [] as number[] };
+  const pageCount = getGuideIndex().pages.length;
+  const pages = [...new Set([...match[1].matchAll(/\d{1,3}/g)].map((m) => Number(m[0])))]
+    .filter((page) => page >= 1 && page <= pageCount);
+  return { reply: reply.replace(SOURCE_LINE_PATTERN, '').trim(), pages };
+}
+
 async function answerQuestion(request: VercelRequest, response: VercelResponse) {
   try {
-    const body = (typeof request.body === 'string' ? JSON.parse(request.body) : request.body || {}) as { message?: unknown };
+    const body = (typeof request.body === 'string' ? JSON.parse(request.body) : request.body || {}) as { message?: unknown; conversationHistory?: unknown };
     const message = typeof body.message === 'string' ? body.message.trim() : '';
     if (!message) return response.status(400).json({ error: '질문을 입력해 주세요.' });
     if (message.length > 2000) return response.status(413).json({ error: '질문은 2,000자 이내로 입력해 주세요.' });
 
-    const sourcePages = findRelevantPages(message);
+    const history = parseHistory(body.conversationHistory, message);
+    let sourcePages = findRelevantPages(message);
+    // "더 자세히 알려줘" 같은 후속 질문은 직전 질문과 합쳐서 찾는다.
+    const previousQuestion = [...history].reverse().find((turn) => turn.role === 'user')?.content;
+    if (sourcePages.length === 0 && previousQuestion) sourcePages = findRelevantPages(`${previousQuestion} ${message}`);
+
     const quickAnswer = getQuickGuideAnswer(message, sourcePages);
     if (quickAnswer || sourcePages.length === 0) {
       return response.status(200).json({
@@ -380,34 +414,37 @@ async function answerQuestion(request: VercelRequest, response: VercelResponse) 
     const { GoogleGenAI } = await import('@google/genai');
     const ai = new GoogleGenAI({ apiKey });
     let aiResponse: any;
-    let answerMode = 'local-index';
+    let aiError: string | undefined;
     try {
-      aiResponse = await answerFromLocalIndex(ai, message, sourcePages);
+      aiResponse = await answerFromLocalIndex(ai, message, sourcePages, AI_TIMEOUT_MS, history);
     } catch (error) {
-      console.warn('Gemini 색인 기반 답변 실패, 서버 내장 답변으로 전환합니다.', error);
-      answerMode = 'local-only-fallback';
+      aiError = error instanceof Error ? error.message.slice(0, 300) : String(error);
+      console.error('Gemini 답변 실패, 비상 답변으로 전환합니다.', error);
     }
 
     if (!aiResponse) {
-      answerMode = 'local-only-fallback';
       return response.status(200).json({
         reply: answerWithoutAi(message, sourcePages),
         sources: (getPreferredPages(message).length > 0
           ? sourcePages.filter((page) => isMainGuidePage(page) && getPreferredPages(message).includes(page.page)).slice(0, 2)
           : sourcePages.slice(0, 3)
         ).map(sourceLabel),
-        answerMode,
+        answerMode: 'local-only-fallback',
+        aiError: aiError || 'EMPTY_RESPONSE',
         suggestedQuestions: getRelatedQuestions(message),
       });
     }
 
+    const rawReply = aiResponse.text?.trim() || NOT_FOUND_REPLY;
+    const { reply, pages: citedPages } = extractCitedSources(rawReply);
+    const notFound = reply.includes(NOT_FOUND_REPLY);
+    const pageByNumber = new Map(getGuideIndex().pages.filter(isMainGuidePage).map((page) => [page.page, page]));
+    const cited = citedPages.map((page) => pageByNumber.get(page)).filter(Boolean) as GuidePage[];
     return response.status(200).json({
-      reply: aiResponse.text?.trim() || NOT_FOUND_REPLY,
-      sources: sourcePages.length > 0
-        ? sourcePages.map(sourceLabel)
-        : [],
-      usage: calculateUsage(aiResponse.usageMetadata),
-      answerMode,
+      reply,
+      sources: notFound ? [] : (cited.length > 0 ? cited : sourcePages.slice(0, 3)).map(sourceLabel),
+      usage: calculateUsage(aiResponse.usageMetadata, aiResponse.modelVersion || getModelCandidates()[0]),
+      answerMode: 'full-guide',
       suggestedQuestions: getRelatedQuestions(message),
     });
   } catch (error) {
@@ -425,7 +462,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
   response.setHeader('Vary', 'Origin');
   response.setHeader('Cache-Control', 'no-store');
   if (request.method === 'OPTIONS') return response.status(204).json({});
-  if (request.method === 'GET') return response.status(200).json({ status: 'ok', service: 'Guidebook indexed chatbot' });
+  if (request.method === 'GET') return response.status(200).json({ status: 'ok', service: 'Guidebook full-guide chatbot', models: getModelCandidates(), hasApiKey: Boolean(process.env.GEMINI_API_KEY) });
   if (request.method === 'POST') return answerQuestion(request, response);
   return response.status(405).json({ error: '지원하지 않는 요청 방식입니다.' });
 }

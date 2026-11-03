@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import handler, { answerFromLocalIndex, findRelevantPages } from '../api/chat';
+import handler, { answerFromLocalIndex, extractCitedSources, findRelevantPages, parseHistory } from '../api/chat';
 
 async function request(body: unknown, method = 'POST') {
   let status = 200;
@@ -69,16 +69,55 @@ test('a hung provider is stopped by the application deadline even if it ignores 
   assert.ok(performance.now() - started < 1000, 'provider must not hold the request indefinitely');
 });
 
-test('successful model response uses an 8-second limit with no retries', async () => {
+test('successful model response gets the full guide with a 25-second limit and no retries', async () => {
   let options: any;
   const expected = { text: '가이드 근거를 바탕으로 한 답변' };
   const ai = { models: { generateContent(request: any) { options = request; return Promise.resolve(expected); } } };
   const result = await answerFromLocalIndex(ai, '풍향계', findRelevantPages('풍향계'));
   assert.equal(result, expected);
-  assert.equal(options.config.httpOptions.timeout, 8000);
+  assert.equal(options.config.httpOptions.timeout, 25000);
   assert.equal(options.config.httpOptions.retryOptions.attempts, 1);
   assert.equal(options.config.abortSignal.aborted, false);
-  assert.match(options.contents, /2026 기상관측표준화 업무가이드/);
+  assert.match(options.config.systemInstruction, /2026 기상관측표준화 업무가이드/);
+  // 전체 가이드가 들어갔는지: 앞쪽·뒤쪽 쪽 표시가 모두 있어야 한다.
+  assert.match(options.config.systemInstruction, /\[p\.30\]/);
+  assert.match(options.config.systemInstruction, /\[p\.150\]/);
+  assert.match(options.contents, /질문: 풍향계/);
+});
+
+test('an invalid model name falls back to a working model', async () => {
+  const savedModel = process.env.GEMINI_MODEL;
+  process.env.GEMINI_MODEL = 'gemini-3.7-flash';
+  const tried: string[] = [];
+  const ai = { models: { generateContent(request: any) {
+    tried.push(request.model);
+    if (request.model === 'gemini-3.7-flash') return Promise.reject(new Error('404 NOT_FOUND: models/gemini-3.7-flash is not found'));
+    return Promise.resolve({ text: '정상 답변' });
+  } } };
+  try {
+    const result = await answerFromLocalIndex(ai, '풍향계', findRelevantPages('풍향계'));
+    assert.equal(result.text, '정상 답변');
+    assert.deepEqual(tried, ['gemini-3.7-flash', 'gemini-3.6-flash']);
+  } finally {
+    if (savedModel === undefined) delete process.env.GEMINI_MODEL;
+    else process.env.GEMINI_MODEL = savedModel;
+  }
+});
+
+test('cited page line becomes the source list and is removed from the reply', () => {
+  const { reply, pages } = extractCitedSources('질문에 답변드립니다.\n\n본문\n\n근거: p.30, p.33, p.999');
+  assert.deepEqual(pages, [30, 33]);
+  assert.doesNotMatch(reply, /근거/);
+});
+
+test('conversation history drops the welcome message and the current question', () => {
+  const history = parseHistory([
+    { id: 'welcome-1', role: 'assistant', content: '안녕하세요' },
+    { id: 'a', role: 'user', content: '강수량계 설치 높이는?' },
+    { id: 'b', role: 'assistant', content: '30cm 이상입니다.' },
+    { id: 'c', role: 'user', content: '그럼 옥상은?' },
+  ], '그럼 옥상은?');
+  assert.deepEqual(history.map((turn) => turn.content), ['강수량계 설치 높이는?', '30cm 이상입니다.']);
 });
 
 test('provider failures propagate immediately without waiting for the deadline', async () => {
