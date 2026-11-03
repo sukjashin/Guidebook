@@ -290,6 +290,7 @@ function calculateUsage(usageMetadata: any, model: string) {
     totalTokens: usageMetadata?.totalTokenCount || inputTokens + outputTokens,
     estimatedCostUsd: Number(estimatedCostUsd.toFixed(5)),
     estimatedCostKrw: Math.round(estimatedCostUsd * USD_TO_KRW),
+    model,
     priceBasis: `${model} 기준 추정치(반복 질문은 Gemini 자동 캐시로 실제 비용이 더 낮을 수 있음)`,
   };
 }

@@ -49,6 +49,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  const dailyUsage = useDailyUsage(messages);
+
   // Check if we are in a clean editor state (no user question yet)
   const isCleanEditor = messages.length <= 1;
 
@@ -286,7 +288,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     {msg.usage && (
                       <div className="mt-2 text-[11px] text-slate-500" title={msg.usage.priceBasis}>
                         예상 사용량: 입력 {msg.usage.inputTokens.toLocaleString()} · 출력 {msg.usage.outputTokens.toLocaleString()} 토큰
-                        {' · '}약 ${msg.usage.estimatedCostUsd.toFixed(4)} ({msg.usage.estimatedCostKrw.toLocaleString()}원)
+                        {' · '}약 {msg.usage.estimatedCostKrw.toLocaleString()}원
+                        {msg.usage.model && <> · {msg.usage.model}</>}
                       </div>
                     )}
 
@@ -389,6 +392,52 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </div>
         </div>
       </form>
+      <p className="mt-1 px-1 text-[10px] leading-tight text-slate-600 text-right" title="이 기기에서 오늘 보낸 질문 기준입니다. 전체 기관 합계가 아닙니다.">
+        오늘 이 기기 사용량: 질문 {dailyUsage.questions.toLocaleString()}건 · {dailyUsage.tokens.toLocaleString()} 토큰 · 약 {dailyUsage.krw.toLocaleString()}원
+        {' · '}
+        <a href="https://aistudio.google.com/rate-limit" target="_blank" rel="noopener noreferrer" className="underline hover:text-slate-400">
+          무료 한도 확인
+        </a>
+      </p>
     </div>
   );
 };
+
+// 이 기기(브라우저)에서 오늘 받은 AI 답변의 질문 수·토큰·예상 비용을 날짜별로 누적한다.
+interface DailyUsage { date: string; questions: number; tokens: number; krw: number; counted: string[]; }
+const USAGE_KEY = 'guidebook-daily-usage';
+const today = () => new Date().toLocaleDateString('sv-SE');
+const emptyUsage = (): DailyUsage => ({ date: today(), questions: 0, tokens: 0, krw: 0, counted: [] });
+
+function loadUsage(): DailyUsage {
+  try {
+    const saved = JSON.parse(localStorage.getItem(USAGE_KEY) || 'null') as DailyUsage | null;
+    return saved && saved.date === today() ? saved : emptyUsage();
+  } catch {
+    return emptyUsage();
+  }
+}
+
+function useDailyUsage(messages: Message[]) {
+  const [usage, setUsage] = useState<DailyUsage>(loadUsage);
+  useEffect(() => {
+    const current = loadUsage();
+    const fresh = messages.filter((msg) => msg.usage && msg.timestamp
+      && new Date(msg.timestamp).toLocaleDateString('sv-SE') === current.date
+      && !current.counted.includes(msg.id));
+    if (fresh.length === 0) {
+      if (current.date !== usage.date) setUsage(current);
+      return;
+    }
+    const next: DailyUsage = {
+      ...current,
+      questions: current.questions + fresh.length,
+      tokens: current.tokens + fresh.reduce((sum, msg) => sum + (msg.usage?.totalTokens || 0), 0),
+      krw: current.krw + fresh.reduce((sum, msg) => sum + (msg.usage?.estimatedCostKrw || 0), 0),
+      counted: [...current.counted, ...fresh.map((msg) => msg.id)].slice(-300),
+    };
+    try { localStorage.setItem(USAGE_KEY, JSON.stringify(next)); } catch { /* 저장 불가 시 화면 표시만 */ }
+    setUsage(next);
+  }, [messages]);
+  return usage;
+}

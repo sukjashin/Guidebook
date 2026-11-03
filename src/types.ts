@@ -12,6 +12,7 @@ export interface Message {
     totalTokens: number;
     estimatedCostUsd: number;
     estimatedCostKrw: number;
+    model?: string;
     priceBasis: string;
   };
 }
