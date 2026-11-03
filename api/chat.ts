@@ -18,6 +18,7 @@ const FALLBACK_MODELS = [
   'gemini-3-flash-preview',
   'gemini-3.5-flash-lite',
   'gemini-3.1-flash-lite',
+  'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
 ];
 // 한도에 걸린 모델은 잠시 건너뛰어, 매 질문마다 실패를 거치며 느려지지 않게 한다(서버 인스턴스 메모리 기준).
