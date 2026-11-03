@@ -10,7 +10,24 @@ const OUTPUT_USD_PER_MILLION = 3.75;
 // 전체 가이드(약 6~7만 토큰)를 읽고 답하므로 8초는 부족하다. Vercel maxDuration(60초) 안에서 여유 있게 둔다.
 const AI_TIMEOUT_MS = 25_000;
 // 존재하지 않는 모델 이름(예: gemini-3.7-flash)이 설정돼 있어도 정상 모델로 자동 전환한다.
-const FALLBACK_MODELS = ['gemini-3.6-flash', 'gemini-3-flash-preview'];
+// 무료 등급은 모델마다 한도가 따로 잡히므로, 앞 모델 한도를 다 쓰면 다음 모델로 넘어간다.
+// 앞쪽일수록 답변 품질이 좋고, 뒤쪽 lite 모델은 품질이 조금 낮은 대신 한도가 넉넉한 편이다.
+const FALLBACK_MODELS = [
+  'gemini-3.6-flash',
+  'gemini-3.8-flash',
+  'gemini-3-flash-preview',
+  'gemini-3.5-flash-lite',
+  'gemini-3.1-flash-lite',
+  'gemini-2.5-flash-lite',
+];
+// 한도에 걸린 모델은 잠시 건너뛰어, 매 질문마다 실패를 거치며 느려지지 않게 한다(서버 인스턴스 메모리 기준).
+const modelCooldownUntil = new Map<string, number>();
+function markModelCooldown(model: string, error: unknown) {
+  const text = error instanceof Error ? error.message : String(error);
+  if (!/429|RESOURCE_EXHAUSTED|quota/i.test(text)) return;
+  const perDay = /per[\s_-]?day|PerDay|daily/i.test(text);
+  modelCooldownUntil.set(model, Date.now() + (perDay ? 30 * 60_000 : 60_000));
+}
 const SOURCE_LINE_PATTERN = /^\s*(?:■\s*)?근거\s*쪽?\s*[:：]\s*(.*)$/m;
 
 const SYSTEM_INSTRUCTION = `# Role (역할)
@@ -317,7 +334,7 @@ function getModelCandidates() {
 // 모델 이름 오류(404), 일시 과부하(503), 할당량 초과(429)는 다음 모델로 넘어가면 해결되는 경우가 많다.
 // (Gemini 무료 등급은 모델별로 할당량이 따로 잡힌다.) 키 오류 등은 즉시 실패시킨다.
 const shouldTryNextModel = (error: unknown) =>
-  /not[\s_]?found|404|is not supported|unsupported model|does not exist|429|RESOURCE_EXHAUSTED|quota|503|UNAVAILABLE|high demand|overloaded/i
+  /not[\s_]?found|404|is not supported|unsupported model|does not exist|429|RESOURCE_EXHAUSTED|quota|503|UNAVAILABLE|high demand|overloaded|thinking/i
     .test(error instanceof Error ? error.message : String(error));
 
 // 기본은 검색 상위 쪽과 그 앞뒤 쪽(표·문맥이 쪽을 넘어가는 경우 대비)만 보낸다.
@@ -374,7 +391,10 @@ export async function answerFromLocalIndex(ai: any, message: string, pages: Guid
   });
   const generate = async () => {
     let lastError: unknown;
-    for (const model of getModelCandidates()) {
+    const candidates = getModelCandidates();
+    const ready = candidates.filter((model) => (modelCooldownUntil.get(model) || 0) <= Date.now());
+    // 모두 대기 중이면 그래도 전부 다시 시도해 본다.
+    for (const model of ready.length > 0 ? ready : candidates) {
       try {
         const result = await ai.models.generateContent({
           model,
@@ -383,7 +403,8 @@ export async function answerFromLocalIndex(ai: any, message: string, pages: Guid
             abortSignal: controller.signal,
             httpOptions: { timeout: timeoutMs, retryOptions: { attempts: 1 } },
             systemInstruction,
-            thinkingConfig: { thinkingLevel: 'LOW' },
+            // 2.5 세대는 thinkingLevel을 지원하지 않아 생략한다.
+            ...(model.startsWith('gemini-2.5') ? {} : { thinkingConfig: { thinkingLevel: 'LOW' } }),
             maxOutputTokens: 4096,
           },
         });
@@ -392,6 +413,7 @@ export async function answerFromLocalIndex(ai: any, message: string, pages: Guid
       } catch (error) {
         lastError = error;
         if (!shouldTryNextModel(error)) throw error;
+        markModelCooldown(model, error);
         console.warn(`Gemini 모델 ${model} 일시 사용 불가, 다음 모델로 전환합니다.`, error);
       }
     }
