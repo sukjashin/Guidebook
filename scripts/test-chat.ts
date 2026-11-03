@@ -69,20 +69,47 @@ test('a hung provider is stopped by the application deadline even if it ignores 
   assert.ok(performance.now() - started < 1000, 'provider must not hold the request indefinitely');
 });
 
-test('successful model response gets the full guide with a 25-second limit and no retries', async () => {
+test('default mode sends matched pages plus neighbours with a 25-second limit and no retries', async () => {
   let options: any;
   const expected = { text: '가이드 근거를 바탕으로 한 답변' };
   const ai = { models: { generateContent(request: any) { options = request; return Promise.resolve(expected); } } };
-  const result = await answerFromLocalIndex(ai, '풍향계', findRelevantPages('풍향계'));
+  const pages = findRelevantPages('풍향풍속계 옥상 설치 높이', 10);
+  const result = await answerFromLocalIndex(ai, '풍향풍속계 옥상 설치 높이', pages);
   assert.equal(result, expected);
   assert.equal(options.config.httpOptions.timeout, 25000);
   assert.equal(options.config.httpOptions.retryOptions.attempts, 1);
   assert.equal(options.config.abortSignal.aborted, false);
-  assert.match(options.config.systemInstruction, /2026 기상관측표준화 업무가이드/);
-  // 전체 가이드가 들어갔는지: 앞쪽·뒤쪽 쪽 표시가 모두 있어야 한다.
-  assert.match(options.config.systemInstruction, /\[p\.30\]/);
-  assert.match(options.config.systemInstruction, /\[p\.150\]/);
-  assert.match(options.contents, /질문: 풍향계/);
+  assert.match(options.contents, /2026 기상관측표준화 업무가이드/);
+  assert.match(options.contents, /\[p\.30\]/);
+  assert.match(options.contents, /\[p\.31\]/, 'neighbour page should be included');
+  const pageCount = (options.contents.match(/\[p\.\d+\]/g) || []).length;
+  assert.ok(pageCount <= 30, `too many pages sent: ${pageCount}`);
+  assert.match(options.contents, /질문: 풍향풍속계/);
+});
+
+test('CHAT_CONTEXT=full sends the whole guide', async () => {
+  process.env.CHAT_CONTEXT = 'full';
+  try {
+    let options: any;
+    const ai = { models: { generateContent(request: any) { options = request; return Promise.resolve({ text: 'ok' }); } } };
+    await answerFromLocalIndex(ai, '풍향계', findRelevantPages('풍향계'));
+    assert.match(options.config.systemInstruction, /\[p\.30\]/);
+    assert.match(options.config.systemInstruction, /\[p\.150\]/);
+  } finally {
+    delete process.env.CHAT_CONTEXT;
+  }
+});
+
+test('busy or over-quota model falls back to the next model', async () => {
+  const tried: string[] = [];
+  const ai = { models: { generateContent(request: any) {
+    tried.push(request.model);
+    if (tried.length === 1) return Promise.reject(new Error('{"error":{"code":503,"status":"UNAVAILABLE"}}'));
+    return Promise.resolve({ text: '정상 답변' });
+  } } };
+  const result = await answerFromLocalIndex(ai, '풍향계', findRelevantPages('풍향계'));
+  assert.equal(result.text, '정상 답변');
+  assert.equal(tried.length, 2);
 });
 
 test('an invalid model name falls back to a working model', async () => {

@@ -17,7 +17,7 @@ const SYSTEM_INSTRUCTION = `# Role (역할)
 당신은 '기상관측표준화'에 관한 모든 지식을 갖춘 전문 비서입니다. 사용자는 유관기관의 기상관측장비 담당자입니다. 언제나 예의 바르고 공손하며, 정확하고 전문적인 어조로 답변합니다.
 
 # Knowledge Base & Source Rule (답변 출처 엄격 제약)
-1. 모든 답변은 아래 [업무가이드 전문]에 실린 「2026 기상관측표준화 업무가이드」 본편의 내용에만 철저히 기반해야 합니다.
+1. 모든 답변은 함께 제공되는 업무가이드 본문(각 쪽은 [p.쪽번호]로 시작)에 실린 「2026 기상관측표준화 업무가이드」 본편의 내용에만 철저히 기반해야 합니다.
 2. 문서에 명시되지 않은 내용이나 개인적인 추측·생각·일반적인 외부 지식은 절대로 포함하지 마십시오. 수치(높이, 거리, 기간, 기한, 비율 등)는 문서에 적힌 값을 그대로 사용하십시오.
 3. 질문이 묻는 대상(측기 종류, 절차 단계, 주체 등)과 정확히 일치하는 부분을 찾아 답하십시오. 비슷한 단어가 나오는 다른 항목(예: 강수량계 질문에 풍속계 기준, 일사계 질문에 기온 기준)을 섞지 마십시오.
 4. 문서에서 답을 찾을 수 없으면 억지로 답변을 생성하지 말고 다음 문장만 출력하십시오.
@@ -162,7 +162,7 @@ function getGuideIndex(): GuideIndex {
   return guideIndex;
 }
 
-export function findRelevantPages(message: string): GuidePage[] {
+export function findRelevantPages(message: string, limit = 6): GuidePage[] {
   const terms = getSearchTerms(message);
   if (terms.length === 0) return [];
   const query = normalize(message);
@@ -198,7 +198,7 @@ export function findRelevantPages(message: string): GuidePage[] {
     })
     .filter(({ score, isFrontMatter }) => score >= 10 && !isFrontMatter)
     .sort((a, b) => b.score - a.score)
-    .slice(0, 6)
+    .slice(0, limit)
     .map(({ page }) => page);
 }
 
@@ -313,8 +313,30 @@ function getModelCandidates() {
   return [...new Set([process.env.GEMINI_MODEL?.trim(), ...FALLBACK_MODELS].filter(Boolean) as string[])];
 }
 
-const isModelUnavailable = (error: unknown) =>
-  /not[\s_]?found|404|is not supported|unsupported model|does not exist/i.test(error instanceof Error ? error.message : String(error));
+// 모델 이름 오류(404), 일시 과부하(503), 할당량 초과(429)는 다음 모델로 넘어가면 해결되는 경우가 많다.
+// (Gemini 무료 등급은 모델별로 할당량이 따로 잡힌다.) 키 오류 등은 즉시 실패시킨다.
+const shouldTryNextModel = (error: unknown) =>
+  /not[\s_]?found|404|is not supported|unsupported model|does not exist|429|RESOURCE_EXHAUSTED|quota|503|UNAVAILABLE|high demand|overloaded/i
+    .test(error instanceof Error ? error.message : String(error));
+
+// 기본은 검색 상위 쪽과 그 앞뒤 쪽(표·문맥이 쪽을 넘어가는 경우 대비)만 보낸다.
+// 전체 가이드(약 7만 토큰)를 매번 보내면 무료 등급의 분당 토큰 한도를 질문 3개 만에 넘기기 때문이다.
+// CHAT_CONTEXT=full 이면 전체 가이드를 보낸다(유료 등급 권장).
+const MAX_FOCUSED_PAGES = 30;
+function getFocusedGuideText(pages: GuidePage[]) {
+  const byNumber = new Map(getGuideIndex().pages.filter(isMainGuidePage).map((page) => [page.page, page]));
+  const selected = new Set<number>();
+  for (const page of pages) {
+    for (const number of [page.page, page.page - 1, page.page + 1]) {
+      if (selected.size >= MAX_FOCUSED_PAGES) break;
+      if (byNumber.has(number) && (number > 10 || number === page.page)) selected.add(number);
+    }
+  }
+  return [...selected].sort((a, b) => a - b)
+    .map((number) => `[p.${number}]\n${byNumber.get(number)!.text}`)
+    .join('\n\n');
+}
+const useFullGuide = () => process.env.CHAT_CONTEXT?.trim().toLowerCase() === 'full';
 
 export function parseHistory(raw: unknown, currentMessage: string): HistoryTurn[] {
   if (!Array.isArray(raw)) return [];
@@ -329,11 +351,18 @@ export function parseHistory(raw: unknown, currentMessage: string): HistoryTurn[
 
 export async function answerFromLocalIndex(ai: any, message: string, pages: GuidePage[], timeoutMs = AI_TIMEOUT_MS, history: HistoryTurn[] = []) {
   if (pages.length === 0) return undefined;
-  const hint = pages.map((page) => `p.${page.page}`).join(', ');
+  const full = useFullGuide();
+  const hint = pages.slice(0, 6).map((page) => `p.${page.page}`).join(', ');
   const historyBlock = history.length > 0
     ? `[이전 대화]\n${history.map((turn) => `${turn.role === 'user' ? '사용자' : '비서'}: ${turn.content}`).join('\n\n')}\n\n`
     : '';
-  const contents = `${historyBlock}[검색 참고] 키워드 검색으로 관련성이 높아 보이는 쪽: ${hint}\n(참고용입니다. 업무가이드 전문 중 다른 쪽에 정확한 답이 있으면 그 쪽을 근거로 사용하십시오.)\n\n질문: ${message}`;
+  const guideBlock = full
+    ? ''
+    : `[업무가이드 발췌] 「${MAIN_GUIDE_TITLE}」 본편 중 질문과 관련된 쪽과 그 앞뒤 쪽입니다.\n\n${getFocusedGuideText(pages)}\n\n`;
+  const contents = `${guideBlock}${historyBlock}[검색 참고] 키워드 검색으로 관련성이 가장 높아 보이는 쪽: ${hint}\n(참고용입니다. 제공된 본문 중 다른 쪽에 정확한 답이 있으면 그 쪽을 근거로 사용하십시오.)\n\n질문: ${message}`;
+  const systemInstruction = full
+    ? `${SYSTEM_INSTRUCTION}\n\n# [업무가이드 전문] 「${MAIN_GUIDE_TITLE}」\n각 쪽은 [p.쪽번호]로 시작합니다.\n\n${getFullGuideText()}`
+    : SYSTEM_INSTRUCTION;
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_, reject) => {
@@ -352,7 +381,7 @@ export async function answerFromLocalIndex(ai: any, message: string, pages: Guid
           config: {
             abortSignal: controller.signal,
             httpOptions: { timeout: timeoutMs, retryOptions: { attempts: 1 } },
-            systemInstruction: `${SYSTEM_INSTRUCTION}\n\n# [업무가이드 전문] 「${MAIN_GUIDE_TITLE}」\n각 쪽은 [p.쪽번호]로 시작합니다.\n\n${getFullGuideText()}`,
+            systemInstruction,
             thinkingConfig: { thinkingLevel: 'LOW' },
             maxOutputTokens: 4096,
           },
@@ -361,9 +390,8 @@ export async function answerFromLocalIndex(ai: any, message: string, pages: Guid
         return result;
       } catch (error) {
         lastError = error;
-        // 모델 이름 문제일 때만 다음 모델로 넘어간다. 키·할당량 오류는 즉시 실패시킨다.
-        if (!isModelUnavailable(error)) throw error;
-        console.warn(`Gemini 모델 ${model} 사용 불가, 다음 모델로 전환합니다.`, error);
+        if (!shouldTryNextModel(error)) throw error;
+        console.warn(`Gemini 모델 ${model} 일시 사용 불가, 다음 모델로 전환합니다.`, error);
       }
     }
     throw lastError;
@@ -394,10 +422,13 @@ async function answerQuestion(request: VercelRequest, response: VercelResponse) 
     if (message.length > 2000) return response.status(413).json({ error: '질문은 2,000자 이내로 입력해 주세요.' });
 
     const history = parseHistory(body.conversationHistory, message);
-    let sourcePages = findRelevantPages(message);
+    let sourcePages = findRelevantPages(message, 10);
     // "더 자세히 알려줘" 같은 후속 질문은 직전 질문과 합쳐서 찾는다.
     const previousQuestion = [...history].reverse().find((turn) => turn.role === 'user')?.content;
-    if (sourcePages.length === 0 && previousQuestion) sourcePages = findRelevantPages(`${previousQuestion} ${message}`);
+    if (previousQuestion && (sourcePages.length === 0 || message.length <= 15)) {
+      const combined = findRelevantPages(`${previousQuestion} ${message}`, 10);
+      sourcePages = [...new Map([...sourcePages, ...combined].map((page) => [page.page, page])).values()].slice(0, 12);
+    }
 
     const quickAnswer = getQuickGuideAnswer(message, sourcePages);
     if (quickAnswer || sourcePages.length === 0) {
@@ -418,7 +449,7 @@ async function answerQuestion(request: VercelRequest, response: VercelResponse) 
     try {
       aiResponse = await answerFromLocalIndex(ai, message, sourcePages, AI_TIMEOUT_MS, history);
     } catch (error) {
-      aiError = error instanceof Error ? error.message.slice(0, 300) : String(error);
+      aiError = (error instanceof Error ? error.message : String(error)).slice(0, 800);
       console.error('Gemini 답변 실패, 비상 답변으로 전환합니다.', error);
     }
 
@@ -444,7 +475,7 @@ async function answerQuestion(request: VercelRequest, response: VercelResponse) 
       reply,
       sources: notFound ? [] : (cited.length > 0 ? cited : sourcePages.slice(0, 3)).map(sourceLabel),
       usage: calculateUsage(aiResponse.usageMetadata, aiResponse.modelVersion || getModelCandidates()[0]),
-      answerMode: 'full-guide',
+      answerMode: useFullGuide() ? 'ai-full-guide' : 'ai-focused',
       suggestedQuestions: getRelatedQuestions(message),
     });
   } catch (error) {
@@ -462,7 +493,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
   response.setHeader('Vary', 'Origin');
   response.setHeader('Cache-Control', 'no-store');
   if (request.method === 'OPTIONS') return response.status(204).json({});
-  if (request.method === 'GET') return response.status(200).json({ status: 'ok', service: 'Guidebook full-guide chatbot', models: getModelCandidates(), hasApiKey: Boolean(process.env.GEMINI_API_KEY) });
+  if (request.method === 'GET') return response.status(200).json({ status: 'ok', service: 'Guidebook chatbot v2', context: useFullGuide() ? 'full' : 'focused', models: getModelCandidates(), hasApiKey: Boolean(process.env.GEMINI_API_KEY) });
   if (request.method === 'POST') return answerQuestion(request, response);
   return response.status(405).json({ error: '지원하지 않는 요청 방식입니다.' });
 }
